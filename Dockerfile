@@ -17,7 +17,10 @@ RUN npm run build
 # ── 阶段一：依赖构建 ──
 FROM python:3.12-slim AS builder
 
-ENV PIP_NO_CACHE_DIR=1 \
+ARG PIP_PROXY=""
+
+ENV PIP_DEFAULT_TIMEOUT=120 \
+    PIP_RETRIES=10 \
     PYTHONDONTWRITEBYTECODE=1
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
@@ -26,11 +29,13 @@ WORKDIR /app
 # 先单独装 CPU 版 torch（FlagEmbedding/sentence-transformers 的依赖），
 # 避免后续 pip 解析时拉取 CUDA 版（多出 ~4GB nvidia 运行库）
 COPY pyproject.toml README.md ./
-RUN mkdir -p careercrew_core careercrew_ai careercrew_api careercrew_mcp \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    mkdir -p careercrew_core careercrew_ai careercrew_api careercrew_mcp \
     && for p in careercrew_core careercrew_ai careercrew_api careercrew_mcp; do \
          echo '"""placeholder for dependency caching"""' > $p/__init__.py; done \
-    && pip install torch --index-url https://download.pytorch.org/whl/cpu \
-    && pip install ".[web]"
+    && if [ -n "$PIP_PROXY" ]; then PIP_EXTRA="--proxy $PIP_PROXY"; else PIP_EXTRA=""; fi \
+    && pip install $PIP_EXTRA torch --index-url https://download.pytorch.org/whl/cpu \
+    && pip install $PIP_EXTRA ".[web]"
 
 # 真实源码覆盖占位包；项目本体以 --no-deps 安装（依赖已就位，秒级），
 # 保证非 /app 工作目录启动（如 alembic、scripts）也能导入正确代码

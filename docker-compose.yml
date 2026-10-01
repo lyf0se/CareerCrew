@@ -1,12 +1,23 @@
 # CareerCrew 一键编排：postgres + qdrant + app（克隆即跑）
 # 用法：
-#   cp .env.example .env   # 填 SILICONFLOW_API_KEY / AUTH_JWT_SECRET 等
+#   cp .env.example .env   # 填 DASHSCOPE_API_KEY / AUTH_JWT_SECRET 等
 #   docker compose up -d --build
-# BGE-M3 模型权重需提前放到 ./models/bge-m3（见 README「容器部署」）
+# BGE-M3 模型目录默认读取 ./models/bge-m3，也可用
+# CAREERCREW_EMBEDDING_MODEL_DIR 指向宿主机上的现有模型目录。
+
+name: careercrew
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
 
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: careercrew-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: careercrew
       POSTGRES_PASSWORD: careercrew
@@ -18,9 +29,14 @@ services:
       interval: 5s
       timeout: 3s
       retries: 12
+    logging: *default-logging
 
   qdrant:
     image: qdrant/qdrant:v1.19.0@sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc
+    container_name: careercrew-qdrant
+    restart: unless-stopped
+    environment:
+      QDRANT__TELEMETRY_DISABLED: "true"
     volumes:
       - qdrant_storage:/qdrant/storage
     healthcheck:
@@ -29,9 +45,17 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
+    logging: *default-logging
 
   app:
-    build: .
+    build:
+      context: .
+      args:
+        PIP_PROXY: ${PIP_PROXY:-}
+    image: careercrew-app:latest
+    container_name: careercrew-app
+    restart: unless-stopped
+    init: true
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,12 +64,22 @@ services:
     env_file: .env
     environment:
       CAREERCREW_SETTINGS_PATH: /app/config/settings.docker.yaml
+      CAREERCREW_EMBEDDING_MODEL_PATH: /models/bge-m3
       DATABASE_URL: postgresql+psycopg://careercrew:careercrew@postgres:5432/careercrew
       # AUTH_DATABASE_URL 未设置时回退 DATABASE_URL（settings.py 约定），无需单设
     ports:
-      - "8000:8000"
+      # 只绑定回环：采集需要后端反向控制宿主机 Chrome（tools.browser.local_guard
+      # 会放行 Docker 网桥网段），公网可达性必须由这条绑定挡住。
+      - "127.0.0.1:${CAREERCREW_WEB_PORT:-8000}:8000"
+    extra_hosts:
+      # 容器内访问宿主机 Chrome 调试端口（tools.search.boss_cdp_url）。
+      # Docker Desktop 已内置该解析；Linux/WSL 需要 host-gateway 显式映射。
+      - "host.docker.internal:host-gateway"
     volumes:
-      - ./models/bge-m3:/models/bge-m3:ro     # BGE-M3 权重（宿主机准备）
+      - type: bind
+        source: ${CAREERCREW_EMBEDDING_MODEL_DIR:-./models/bge-m3}
+        target: /models/bge-m3
+        read_only: true
       - app_uploads:/app/data                 # 上传附件/解析产物/OSS 回退目录
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/healthz || exit 1"]
@@ -53,8 +87,12 @@ services:
       timeout: 3s
       retries: 12
       start_period: 120s                      # 首次惰性初始化（含模型加载）较慢
+    logging: *default-logging
 
 volumes:
   pgdata:
+    name: careercrew_pgdata
   qdrant_storage:
+    name: careercrew_qdrant_storage
   app_uploads:
+    name: careercrew_app_uploads

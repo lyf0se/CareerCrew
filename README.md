@@ -82,7 +82,7 @@ CareerCrew/
 - **Python 3.12**（`requires-python = ">=3.12,<3.13"`，其他版本不可用）
 - **Node.js 22**（CI 使用版本；前端开发构建需要）
 - **Docker**（运行 PostgreSQL 16 与 Qdrant 官方镜像）
-- **BGE-M3 本地模型权重**（约 2GB；下载后将路径填入 `config/settings.yaml` 的 `embedding.model_path`，默认值是开发者本机路径，必须修改）
+- **BGE-M3 本地模型权重**（约 2GB；本地开发修改 `config/settings.yaml` 的 `embedding.model_path`，Docker 部署设置 `CAREERCREW_EMBEDDING_MODEL_DIR`）
 - **API Key**：硅基流动（必需）；MinerU（文档解析 `rag.loaders.provider=api` 时必需）
 - **Google Chrome**（岗位匹配实时抓取需要：通过 CDP 调试端口接管已登录的 Boss直聘 与 猎聘）
 
@@ -105,7 +105,28 @@ cp .env.example .env   # 然后按需填写
 
 > `.env` 已被 `.gitignore` 排除（含 `!.env.example` 否定规则），**绝不提交真实密钥**。
 
-### 3. 安装依赖
+### 3. Docker 全栈启动（推荐）
+
+PostgreSQL、Qdrant 和 Web/API 全部由 Compose 管理：
+
+```bash
+# .env 至少配置 DASHSCOPE_API_KEY、AUTH_JWT_SECRET，以及模型目录
+# CAREERCREW_EMBEDDING_MODEL_DIR=F:/AI_models/BAAI--bge-m3/snapshots/master
+
+docker compose up -d --build
+docker compose ps
+curl http://localhost:8000/readyz
+```
+
+启动完成后访问 <http://localhost:8000>。三个服务应全部为 `healthy`，`/readyz` 应返回：
+
+```json
+{"status":"ready","checks":{"postgres":"ok","qdrant":"ok"}}
+```
+
+完整部署、持久化卷、更新与迁移说明见 [容器部署](#容器部署)。
+
+### 4. 本地开发：安装依赖
 
 ```bash
 # 后端（核心依赖 + Web + 测试工具链；含 FlagEmbedding/torch 等重 ML 栈，首次安装体积较大）
@@ -123,17 +144,16 @@ cd ..
 # （可选）启动 Chrome CDP 调试实例以开启 Boss直聘/猎聘 真实岗位实时抓取：
 # 运行脚本自动调起 Chrome，并在打开的页面中分别登录 Boss直聘 与 猎聘 即可：
 powershell -ExecutionPolicy Bypass -File scripts/start_chrome_cdp.ps1
+
+# Docker 部署时后端在容器里，无法代你启动宿主机浏览器：请新建一个 Chrome 快捷方式，
+# 位置填下面这行，用它打开并登录一次（登录态保存在专用数据目录，只需一次）。
+# 详见 docs/OPS_DOCKER_MIGRATION.md §8。
+# "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir=C:\ChromeDevData https://www.zhipin.com https://www.liepin.com
 ```
 
-### 4. 启动基础服务
+### 5. 本地开发：启动基础服务
 
-本地开发可直接用 compose 起依赖（跳过 app 服务）：
-
-```bash
-docker compose up -d postgres qdrant
-```
-
-或用通用容器手动启动：
+本地开发需要从宿主机连接数据库；完整三服务 compose 只让数据库在容器网络内互通，不向宿主机发布端口。因此本地开发可继续用独立容器启动依赖：
 
 ```bash
 docker run -d --name postgres --restart unless-stopped -p 5432:5432 \
@@ -143,9 +163,9 @@ docker run -d --name postgres --restart unless-stopped -p 5432:5432 \
 docker run -d --name qdrant --restart unless-stopped -p 6333:6333 -p 6334:6334 qdrant/qdrant
 ```
 
-> 完整三服务一键编排见 [容器部署](#容器部署)。
+> 完整三服务一键编排见 [容器部署](#容器部署)；已有 PostgreSQL/Qdrant 数据迁移见 [docs/OPS_DOCKER_MIGRATION.md](docs/OPS_DOCKER_MIGRATION.md)。
 
-### 5. 启动项目
+### 6. 本地开发：启动项目
 
 ```bash
 # 后端 API（首个请求触发重组件惰性加载，约 10–30 秒属正常）
@@ -183,6 +203,9 @@ uvicorn careercrew_api.main:app --port 8000   # 检测到 dist/ 即自动托管 
 | `LANGSMITH_API_KEY` | 否 | LangSmith 追踪密钥，缺失时自动禁用追踪 |
 | `CAREERCREW_ENV` | 否 | 运行环境覆盖（默认 development；production 会强制校验认证安全配置） |
 | `CAREERCREW_AGENT_VERSION` | 否 | agent 版本标记（进入追踪与评测记录） |
+| `CAREERCREW_EMBEDDING_MODEL_DIR` | Docker 按需 | 宿主机 BGE-M3 目录，只读挂载到 `/models/bge-m3`；默认 `./models/bge-m3` |
+| `CAREERCREW_WEB_PORT` | 否 | Compose 对外映射的 Web/API 端口；默认 `8000` |
+| `PIP_PROXY` | 构建按需 | 镜像构建时传给 pip 的代理；Docker Desktop 可填 `http://host.docker.internal:7890` |
 | `OSS_ENDPOINT` / `OSS_ACCESS_KEY_ID` / `OSS_ACCESS_KEY_SECRET` / `OSS_BUCKET_NAME` | 否 | 阿里云 OSS 头像存储；任一缺失则回退本地 `data/uploads/avatars/` |
 | `POSTGRES_TEST_DSN` | 测试 | 集成测试使用的数据库连接串 |
 
@@ -198,8 +221,8 @@ uvicorn careercrew_api.main:app --port 8000   # 检测到 dist/ 即自动托管 
 | Liveness 探针（无鉴权） | <http://localhost:8000/healthz> |
 | Readiness 探针（Postgres/Qdrant 连通性，无鉴权） | <http://localhost:8000/readyz> |
 | 组件级健康明细（需登录） | <http://localhost:8000/api/health> |
-| Qdrant | <http://localhost:6333>（HTTP）/ 6334（gRPC） |
-| PostgreSQL | localhost:5432 |
+| Qdrant（Compose 内网） | `http://qdrant:6333`（HTTP）/ 6334（gRPC） |
+| PostgreSQL（Compose 内网） | `postgres:5432` |
 
 ## API 文档
 
@@ -207,34 +230,74 @@ FastAPI 默认文档页开启：Swagger UI `/docs`、ReDoc `/redoc`、OpenAPI Sc
 
 ## 容器部署
 
-仓库提供多阶段 `Dockerfile` 与一键编排 `docker-compose.yml`（postgres + qdrant + app 三服务，克隆即跑）：
+仓库提供多阶段 `Dockerfile` 与一键编排 `docker-compose.yml`。Compose 同时管理：
+
+| 服务 | 容器名 | 持久化卷 | 访问方式 |
+|---|---|---|---|
+| Web / API | `careercrew-app` | `careercrew_app_uploads` | 宿主机 `http://localhost:${CAREERCREW_WEB_PORT:-8000}` |
+| PostgreSQL 16 | `careercrew-postgres` | `careercrew_pgdata` | Compose 内网 `postgres:5432` |
+| Qdrant | `careercrew-qdrant` | `careercrew_qdrant_storage` | Compose 内网 `http://qdrant:6333` |
+
+### 首次启动
 
 ```bash
-cp .env.example .env          # 填 DASHSCOPE_API_KEY / AUTH_JWT_SECRET（≥32 字符）
-mkdir -p models/bge-m3        # 放置 BGE-M3 权重（只读挂载进容器 /models/bge-m3）
+cp .env.example .env
+# 至少填写 DASHSCOPE_API_KEY、AUTH_JWT_SECRET（≥32 字符）
+# 设置 CAREERCREW_EMBEDDING_MODEL_DIR 指向宿主机 BGE-M3 目录
+
+docker compose config --quiet
 docker compose up -d --build
-curl http://localhost:8000/readyz   # {"status":"ready","checks":{"postgres":"ok","qdrant":"ok"}} 即就绪
+docker compose ps
+curl http://localhost:8000/readyz
 ```
 
-- 镜像分层：依赖安装层仅随 `pyproject.toml` 变化重建，业务代码改动命中缓存秒级完成；CPU torch 单独预装避免拉 CUDA 版
-- app 容器启动先跑 `alembic upgrade head` 再起 uvicorn（迁移失败即退出，不做半启动）；compose 注入的 `postgresql+psycopg://` 方言 DSN 应用侧自动归一兼容
-- 非 root 运行；数据落 `app_uploads` 卷（上传/解析产物）；镜像与 compose 均带 healthcheck
-- 生产加固：`auth.cookie_secure` 在容器配置中已为 true（现代浏览器对 http://localhost 视为可信上下文）；有域名/LB 时在 `config/settings.docker.yaml` 的 `auth.trusted_origins` 追加
+应用镜像由三个构建阶段组成：Node 编译前端、Python 安装 CPU 版 torch 和完整 ML 依赖、运行镜像组装 venv 与前端 `dist`。构建阶段支持 pip 重试和缓存；国内网络可设置：
 
-裸 `docker build -t careercrew .` 也可单独构建镜像。常用容器操作：
+```dotenv
+PIP_PROXY=http://host.docker.internal:7890
+```
+
+### 启动与更新
 
 ```bash
-docker compose logs -f app     # 跟踪应用日志
-docker compose ps              # 三服务健康状态
-docker compose down            # 停止（加 -v 连数据卷一起删）
+# 启动或重建应用
+docker compose up -d --build
+
+# 查看状态与日志
+docker compose ps
+docker compose logs -f app
+
+# 仅重启应用
+docker compose restart app
+
+# 停止服务，保留数据卷
+docker compose down
 ```
+
+`docker compose down -v` 会删除 PostgreSQL、Qdrant 和上传文件卷，只能在确认不需要数据时使用。
+
+### 数据与迁移
+
+- PostgreSQL、Qdrant、上传文件和解析产物均落在命名卷中；容器重建不会清空数据。
+- app 启动前自动执行 `alembic upgrade head`，迁移失败时容器不会半启动。
+- 已有旧版独立 `postgres`、`qdrant` 容器时，不要直接删除旧卷。先按 [PostgreSQL/Qdrant 迁移说明](docs/OPS_DOCKER_MIGRATION.md) 完成逻辑备份、恢复和逐表/逐集合校验。
+- 日常备份与恢复演练见 [docs/OPS_BACKUP.md](docs/OPS_BACKUP.md)。
+
+Compose 中的数据库默认不向宿主机发布端口。需要执行 SQL 时：
+
+```bash
+docker compose exec postgres psql -U careercrew -d careercrew
+```
+
+裸 `docker build -t careercrew .` 也可单独构建镜像；生产域名、反向代理和 Cookie 安全设置见 `config/settings.docker.yaml`。
 
 ## 数据库
 
 - **PostgreSQL 16** 是唯一关系库：账号（`auth_accounts` 等 4 张认证表）、会话（`conversations` / `conversation_turns` / `messages` / `agent_runs` 等）、记忆（情景事件 / 语义事实 / 记忆策略）、聊天附件、LangGraph checkpoint。
 - **Schema 迁移统一走 Alembic**：根目录 `alembic.ini` + `migrations/`（0001_baseline 为 pg_dump 全量快照，24 表）。容器部署在应用启动前自动 `alembic upgrade head`；本地手动执行 `alembic upgrade head` 即可初始化。各 store 保留惰性建表作为开发兜底，并有双库一致性守卫测试（`tests/integration/test_alembic_baseline.py`）拦住漂移——新增字段一律走新 migration。
-- **Qdrant** 集合 `careercrew_mm`（知识库）与 `careercrew_episodic_v2`（情景记忆）由应用自动创建。
-- 历史数据迁移脚本见 `scripts/migrate_*.py`（默认 dry-run，`--apply` 生效）；备份恢复流程见 [docs/OPS_BACKUP.md](docs/OPS_BACKUP.md)。
+- **Qdrant** 集合 `careercrew_mm`（知识库）、`careercrew_episodic_v2`（情景记忆）与 `careercrew_workspace_messages`（工作区语义检索）由应用自动创建。
+- Docker 数据位于 `careercrew_pgdata`、`careercrew_qdrant_storage`、`careercrew_app_uploads`；不要通过复制运行中的数据库目录迁移。
+- 历史数据迁移脚本见 `scripts/migrate_*.py`（默认 dry-run，`--apply` 生效）；PostgreSQL dump、Qdrant snapshot 与文件哈希备份流程见 [docs/OPS_BACKUP.md](docs/OPS_BACKUP.md)。
 
 ## 测试
 
@@ -276,13 +339,16 @@ python scripts/eval_runner.py --offline --compare data/eval/baseline.json --fail
 
 | 现象 | 原因与处理 |
 |------|-----------|
+| `docker compose up` 报 8000 端口占用 | 本机已有服务占用 `8000`；停止旧进程，或在 `.env` 设置 `CAREERCREW_WEB_PORT=其他端口` |
 | 前端启动报端口占用退出 | Vite 配置了 `strictPort: true`（5176 固定），释放端口或改 `vite.config.ts`（注意同步 `auth.trusted_origins`） |
 | 后端启动即抛 `SettingsError` | `.env` 缺少必填变量（`DASHSCOPE_API_KEY` / `DATABASE_URL`），或 `config/settings.yaml` 字段非法 |
+| Docker 构建下载 PyPI 超时 | 在 `.env` 设置 `PIP_PROXY=http://host.docker.internal:7890` 后重新执行 `docker compose build app` |
+| 宿主机无法连接 `localhost:5432/6333` | Compose 的数据库仅在内部网络发布；使用 `docker compose exec postgres psql ...`，或按本地开发方式运行独立容器 |
 | 接口返回 503「AI 服务暂不可用」 | Qdrant / Postgres 未启动，或重组件初始化失败；确认两个容器在跑后重试 |
 | 首个请求卡住 10–30 秒 | 正常现象：embedding 等重组件按需惰性加载 |
 | 启动时报 BGE-M3 模型路径错误 | `config/settings.yaml` 的 `embedding.model_path` 默认是开发者本机路径，改为本地实际权重路径 |
 | 登录提示锁定 | 连续失败 5 次锁定 15 分钟（按用户名+IP 计数），稍后再试 |
-| `search_jobs` 无法获取岗位或提示未配置 | 职位搜索优先读本地 jobs 库缓存；实时抓取使用已登录 Chrome 的 CDP 调试通道（端口 9222），请运行 `scripts/start_chrome_cdp.ps1` 并在浏览器中登录 Boss 直聘与猎聘 |
+| `search_jobs` 无法获取岗位或提示未配置 | 职位搜索优先读本地 jobs 库缓存；实时抓取使用已登录 Chrome 的 CDP 调试通道（端口 9222）。本地直跑用 `scripts/start_chrome_cdp.ps1`；Docker 部署需在宿主机用带 `--remote-debugging-port=9222` 的快捷方式启动 Chrome（见 `docs/OPS_DOCKER_MIGRATION.md` §8）。职位匹配页的采集器卡片会显示具体不可用原因 |
 | 文档 / 简历解析失败 | `MINERU_API_KEY` 未配置（`provider: api` 时必需），或文件超出大小上限（简历 20MB / 知识库 50MB / 附件 25MB） |
 | 国内访问百炼 / LangSmith 超时 | 配置代理（如 Clash `http://127.0.0.1:7890`）后重试 |
 
