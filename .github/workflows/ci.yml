@@ -46,6 +46,11 @@ jobs:
       - name: Unit tests (full offline suite)
         env:
           SILICONFLOW_API_KEY: "sk-test-ci-dummy"
+          # tests/unit/test_browser_router.py 在收集期 import careercrew_api.main，
+          # 而模块级 `app = create_app()` 会调 load_auth_settings() fail-fast 要求 DSN。
+          # 纯单元 job 无 postgres service，但该 job 不用 TestClient 上下文管理器，
+          # lifespan 不会执行、不会真连库，故给占位 DSN 即可通过收集。
+          DATABASE_URL: "postgresql://careercrew:careercrew@localhost:5432/careercrew"
         # 重 ML 栈（FlagEmbedding/torch）不进 CI：integration 标记的用例归 nightly，
         # smoke 测试对重依赖自动 skip（tests/unit/test_smoke_imports.py）
         run: |
@@ -81,7 +86,8 @@ jobs:
           pip install pytest pytest-mock pytest-check pytest-cov fastapi uvicorn python-multipart \
             "PyJWT>=2.10" "argon2-cffi>=23.1" pydantic PyYAML python-dotenv numpy \
             "langgraph>=1.2.0" "langchain>=1.0.0" "langchain-core>=1.0.0" "langchain-openai>=1.0.0" \
-            "qdrant-client>=1.19.0" "langgraph-checkpoint-sqlite>=3.0.0" "psycopg[binary]>=3.1.0" "psycopg-pool>=3.2"
+            "qdrant-client>=1.19.0" "langgraph-checkpoint-sqlite>=3.0.0" "psycopg[binary]>=3.1.0" "psycopg-pool>=3.2" \
+            "pymupdf>=1.24.0"
           pip install -e . --no-deps
       - name: API tests (FakeRuntime) with coverage
         env:
@@ -188,6 +194,11 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+      - name: Prepare .env from template
+        # app 服务声明了 `env_file: .env`，文件缺失时 `docker compose config`
+        # 直接报 exit 1。仓库只提交 .env.example，按 README 的「克隆即跑」
+        # 流程先复制一份，值留空也不影响 compose 校验与后续构建。
+        run: cp .env.example .env
       - name: Validate compose file
         run: docker compose config -q
       - name: Build app image (multi-stage)
@@ -297,5 +308,8 @@ jobs:
         env:
           SILICONFLOW_API_KEY: "sk-test-ci-dummy"
           POSTGRES_TEST_DSN: postgresql://careercrew:careercrew@localhost:5432/careercrew
+          # 同 unit job：收集期 import careercrew_api.main 会要求 DSN，此处指向
+          # 本 job 自带的 postgres service，lifespan 真连库时也用得上。
+          DATABASE_URL: "postgresql://careercrew:careercrew@localhost:5432/careercrew"
         run: |
           pytest -q -m "integration or e2e"
