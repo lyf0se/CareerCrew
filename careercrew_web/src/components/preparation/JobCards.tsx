@@ -4,27 +4,47 @@ import { BookmarkCheck, BookmarkPlus, ChevronDown, ChevronUp, ExternalLink } fro
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { collectOpportunity, isSafeHttpUrl } from "@/lib/preparation"
+import { captureJobJd, collectOpportunity, isSafeHttpUrl } from "@/lib/preparation"
 import { networkErrorText } from "@/lib/errors"
 import type { JobOpportunity } from "@/types"
 
 /**
  * 匹配回答下方的结构化岗位卡片（仅来自成功 search_jobs 工具的结构化结果，
  * 绝不解析 LLM 正文）。收藏动作把该岗位写入"岗位准备"，自动携带 JD 快照。
+ *
+ * 搜索列表页拿不到 JD 正文（榜单接口不返回），因此收藏时按岗位链接抓取一次详情页：
+ * 数据库对 jd 有 NOT NULL 约束，必须先取到 JD 才能建岗位，取不到则引导手动粘贴。
  */
 function JobCard({ job }: { job: JobOpportunity }) {
   const [expandJd, setExpandJd] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savedId, setSavedId] = useState<string | null>(null)
   const [error, setError] = useState("")
+  /** 搜索结果里没有 JD，收藏时抓到的正文在这里回显给用户确认 */
+  const [capturedJd, setCapturedJd] = useState("")
 
-  const safeUrl = isSafeHttpUrl(job.url)
+  const jobUrl = job.url || ""
+  const safeUrl = isSafeHttpUrl(jobUrl)
+  const jd = job.jd || capturedJd
+
   const handleCollect = async () => {
     if (saving || savedId) return
     setSaving(true)
     setError("")
     try {
-      const saved = await collectOpportunity(job)
+      let resolvedJd: string = job.jd || ""
+      if (!resolvedJd.trim()) {
+        if (!safeUrl) {
+          throw new Error("该岗位缺少来源链接，无法自动采集 JD，请改用「岗位准备 → 手动录入岗位」")
+        }
+        const captured = await captureJobJd(jobUrl)
+        if (captured.status !== "captured" || !captured.jd) {
+          throw new Error(captured.message || "未能采集到 JD 正文，请稍后重试或手动粘贴")
+        }
+        resolvedJd = captured.jd
+        setCapturedJd(captured.jd)
+      }
+      const saved = await collectOpportunity({ ...job, jd: resolvedJd })
       setSavedId(saved.id)
     } catch (e) {
       setError(e instanceof Error ? e.message : networkErrorText(e, "收藏失败，请稍后重试"))
@@ -59,10 +79,11 @@ function JobCard({ job }: { job: JobOpportunity }) {
           </a>
         )}
       </div>
-      {job.jd ? (
+      {jd ? (
         <div className="mt-2 text-[12.5px] leading-relaxed text-ink-soft">
+          {!job.jd && <span className="text-[11.5px] text-emerald-600">已采集 JD 全文 · </span>}
           <p className={expandJd ? "whitespace-pre-wrap break-words" : "line-clamp-2 whitespace-pre-wrap break-words"}>
-            {job.jd}
+            {jd}
           </p>
           <button
             type="button"
@@ -74,7 +95,9 @@ function JobCard({ job }: { job: JobOpportunity }) {
         </div>
       ) : (
         <p className="mt-2 text-[12px] text-ink-faint">
-          暂无 JD 全文：请打开来源链接复制 JD，再通过「岗位准备 → 手动录入岗位」保存。
+          {safeUrl
+            ? "搜索结果不含 JD 全文，点「收藏岗位」时会自动打开岗位详情页采集。"
+            : "该岗位没有来源链接，无法自动采集 JD：请用「岗位准备 → 手动录入岗位」保存。"}
         </p>
       )}
 
@@ -93,11 +116,11 @@ function JobCard({ job }: { job: JobOpportunity }) {
             variant="outline"
             size="sm"
             className="h-[26px] text-[12px]"
-            disabled={saving || !job.jd}
-            title={!job.jd ? "缺少 JD 全文，请先手动录入" : undefined}
+            disabled={saving}
             onClick={handleCollect}
           >
-            <BookmarkPlus className="h-3.5 w-3.5" /> {saving ? "收藏中…" : "收藏岗位"}
+            <BookmarkPlus className="h-3.5 w-3.5" />
+            {saving ? (job.jd ? "收藏中…" : "采集 JD 中…") : "收藏岗位"}
           </Button>
         )}
         {error && <span className="text-[11.5px] text-destructive">{error}</span>}

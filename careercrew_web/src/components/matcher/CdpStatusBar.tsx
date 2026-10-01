@@ -6,6 +6,19 @@ import { Card, CardContent } from "@/components/ui/card"
 import { apiFetch } from "@/lib/auth"
 import { CdpLaunchDialog } from "./CdpLaunchDialog"
 
+/**
+ * 采集专用 Chrome 的一次性设置指引。
+ * commands 按平台给出多份：后端可能在 Linux 容器里、而用户坐在 Windows 上，
+ * 由前端按客户端平台挑选，避免给错命令。
+ */
+export interface CollectorSetup {
+  port: number
+  commands: Record<string, string>
+  user_data_dirs: Record<string, string>
+  default_platform: string
+  steps: string[]
+}
+
 export interface CdpStatus {
   connected: boolean
   cdp_url: string
@@ -15,6 +28,16 @@ export interface CdpStatus {
   command: string
   bat_path: string
   message: string
+  setup?: CollectorSetup
+}
+
+/** 采集器接口不可用时的原因说明（403 多出现在容器部署未放宽来源校验的情况）。 */
+function unavailableReason(httpStatus: number): string {
+  if (httpStatus === 403) {
+    return "后端拒绝了采集器请求（仅支持本机访问）。容器部署需要把 tools.browser.local_guard 设为 container，并把发布端口绑定到 127.0.0.1"
+  }
+  if (httpStatus === 401) return "登录状态已失效，请重新登录后再试"
+  return `采集器接口返回 ${httpStatus}，暂时无法检测采集器状态`
 }
 
 interface CdpStatusBarProps {
@@ -25,6 +48,7 @@ interface CdpStatusBarProps {
 
 export function CdpStatusBar({ variant = "card", onToast }: CdpStatusBarProps) {
   const [status, setStatus] = useState<CdpStatus | null>(null)
+  const [loadError, setLoadError] = useState("")
   const [loading, setLoading] = useState(false)
   const [launching, setLaunching] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -37,9 +61,14 @@ export function CdpStatusBar({ variant = "card", onToast }: CdpStatusBarProps) {
       if (res.ok) {
         const data = (await res.json()) as CdpStatus
         setStatus(data)
+        setLoadError("")
+      } else {
+        setStatus(null)
+        setLoadError(unavailableReason(res.status))
       }
     } catch {
-      // 保持旧状态
+      setStatus(null)
+      setLoadError("无法连接后端，采集器状态未知")
     } finally {
       setLoading(false)
     }
@@ -92,7 +121,77 @@ export function CdpStatusBar({ variant = "card", onToast }: CdpStatusBarProps) {
     })
   }
 
-  if (!status) return null
+  // 状态未拿到时不能静默 return null：整块功能凭空消失会让用户完全无从判断原因。
+  // 这里明确渲染"不可用 + 原因 + 设置引导"，把失败暴露出来。
+  if (!status) {
+    const reason = loadError || (loading ? "正在检测采集器状态…" : "采集器状态未知")
+    const unavailableDialog = (
+      <CdpLaunchDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        status={status}
+        unavailableReason={loadError}
+        onStatusUpdate={setStatus}
+        onToast={onToast}
+      />
+    )
+
+    if (variant === "banner") {
+      return (
+        <>
+          <div className="flex items-center justify-between border-b border-border/50 bg-amber-500/5 px-4 py-2 text-xs">
+            <div className="flex min-w-0 items-center gap-2">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+              <span className="truncate text-muted-foreground">实时采集器不可用：{reason}</span>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <Button size="sm" variant="ghost" className="h-6 gap-1 px-2 text-xs" onClick={() => setDialogOpen(true)}>
+                <Settings className="h-3 w-3" />
+                设置引导
+              </Button>
+              <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground" onClick={fetchStatus} disabled={loading} title="重新检测">
+                <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
+              </Button>
+            </div>
+          </div>
+          {unavailableDialog}
+        </>
+      )
+    }
+
+    return (
+      <>
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <CardContent className="p-4 sm:p-5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  <AlertCircle className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-foreground">实时采集器不可用</h4>
+                  <p className="text-xs text-muted-foreground">{reason}</p>
+                </div>
+              </div>
+              <Button size="sm" variant="ghost" className="h-7 w-7 shrink-0 p-0 text-muted-foreground" onClick={fetchStatus} disabled={loading} title="重新检测">
+                <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+              </Button>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={() => setDialogOpen(true)}>
+                <Settings className="h-3.5 w-3.5" />
+                查看设置引导
+              </Button>
+              <span className="text-[11px] text-muted-foreground">
+                修复前仍可手动录入岗位，或在岗位准备里粘贴 JD
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+        {unavailableDialog}
+      </>
+    )
+  }
 
   // 1) 紧凑横条模式（顶部常驻）
   if (variant === "banner") {

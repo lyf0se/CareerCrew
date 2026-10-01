@@ -1,4 +1,6 @@
 import { useState } from "react"
+import { Download } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -13,6 +15,7 @@ export function OpportunityForm({
   draft,
   saving,
   error,
+  onCaptureJd,
   onSubmit,
   onCancel,
 }: {
@@ -21,6 +24,8 @@ export function OpportunityForm({
   draft?: Partial<OpportunityInput> | null
   saving: boolean
   error?: string
+  /** 提供后显示「从链接采集 JD」：按岗位链接抓详情页正文并回填（Boss/猎聘可用） */
+  onCaptureJd?: (url: string) => Promise<string>
   onSubmit: (input: OpportunityInput) => void
   onCancel: () => void
 }) {
@@ -32,6 +37,8 @@ export function OpportunityForm({
   const [source, setSource] = useState(draft?.source ?? initial?.source ?? "")
   const [url, setUrl] = useState(draft?.url ?? initial?.url ?? "")
   const [touched, setTouched] = useState(false)
+  const [capturing, setCapturing] = useState(false)
+  const [captureError, setCaptureError] = useState("")
 
   const companyOk = company.trim().length > 0
   const titleOk = title.trim().length > 0
@@ -50,6 +57,19 @@ export function OpportunityForm({
       source: source.trim(),
       url: url.trim(),
     })
+  }
+
+  const handleCaptureJd = async () => {
+    if (!onCaptureJd || capturing || !url.trim()) return
+    setCapturing(true)
+    setCaptureError("")
+    try {
+      setJd(await onCaptureJd(url.trim()))
+    } catch (e) {
+      setCaptureError(e instanceof Error ? e.message : "采集失败，请稍后重试或手动粘贴 JD")
+    } finally {
+      setCapturing(false)
+    }
   }
 
   return (
@@ -90,7 +110,23 @@ export function OpportunityForm({
         </label>
       </div>
       <label className="flex flex-col gap-1 text-[12.5px] text-ink-soft">
-        岗位描述 JD <span className="text-destructive">*</span>
+        <span className="flex items-center justify-between gap-2">
+          <span>岗位描述 JD <span className="text-destructive">*</span></span>
+          {onCaptureJd && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-[11px]"
+              onClick={handleCaptureJd}
+              disabled={capturing || !url.trim()}
+              title={url.trim() ? "按岗位链接打开详情页抓取 JD 正文" : "请先填写岗位链接"}
+            >
+              <Download className="h-3 w-3" />
+              {capturing ? "采集中…" : "从链接采集 JD"}
+            </Button>
+          )}
+        </span>
         <Textarea
           value={jd}
           onChange={(e) => setJd(e.target.value)}
@@ -98,6 +134,7 @@ export function OpportunityForm({
           className="min-h-[140px]"
         />
         <span className="text-[11px] text-ink-faint">{jd.length}/30000</span>
+        {captureError && <span className="text-[11px] text-destructive">{captureError}</span>}
         {touched && !jdOk && <span className="text-[11px] text-destructive">JD 不能为空</span>}
       </label>
       {error && <p className="text-[12px] text-destructive">{error}</p>}

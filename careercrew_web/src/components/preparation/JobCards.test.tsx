@@ -50,11 +50,53 @@ describe("JobCards", () => {
     expect(screen.queryByRole("link", { name: /来源链接/ })).toBeNull()
   })
 
-  it("无 JD 全文的岗位禁用收藏并提示手动录入（避免必然失败的请求）", () => {
+  it("无来源链接的岗位：提示走手动录入，不自动采集", () => {
+    renderCards([{ ...JOB, jd: "", url: "" }])
+    expect(screen.getByText(/手动录入岗位/)).toBeTruthy()
+  })
+
+  it("无 JD 全文的岗位：收藏时先采集 JD，再带着 JD 建岗位", async () => {
+    apiFetch.mockImplementation(async (url: string) => {
+      if (url === "/api/preparation/capture-jd") {
+        return {
+          ok: true, status: 200,
+          json: async () => ({ status: "captured", jd: "岗位职责：负责接口开发", message: "已采集 JD" }),
+        }
+      }
+      return { ok: true, status: 201, json: async () => ({ id: "opp-1", company: "测试公司", title: "Java开发" }) }
+    })
     renderCards([{ ...JOB, jd: "" }])
+
     const btn = screen.getByRole("button", { name: /收藏岗位/ }) as HTMLButtonElement
-    expect(btn.disabled).toBe(true)
-    expect(screen.getByText(/手动录入/)).toBeTruthy()
+    expect(btn.disabled).toBe(false)      // 缺 JD 不再让收藏入口不可用
+    fireEvent.click(btn)
+
+    await waitFor(() => expect(screen.getByText("已收藏")).toBeTruthy())
+    expect(apiFetch.mock.calls.map(([url]) => url)).toEqual([
+      "/api/preparation/capture-jd",
+      "/api/preparation/opportunities",
+    ])
+    const [, init] = apiFetch.mock.calls[1]
+    expect(JSON.parse((init as RequestInit).body as string)).toMatchObject({
+      jd: "岗位职责：负责接口开发",
+    })
+    expect(screen.getByText(/已采集 JD 全文/)).toBeTruthy()
+  })
+
+  it("采集不到 JD：展示原因且不创建岗位", async () => {
+    apiFetch.mockImplementation(async () => ({
+      ok: true, status: 200,
+      json: async () => ({
+        status: "failed", jd: "",
+        message: "未能从详情页读到 JD 正文，请确认采集浏览器已登录 Boss直聘 且窗口保持打开",
+      }),
+    }))
+    renderCards([{ ...JOB, jd: "" }])
+    fireEvent.click(screen.getByRole("button", { name: /收藏岗位/ }))
+
+    await waitFor(() => expect(screen.getByText(/未能从详情页读到 JD 正文/)).toBeTruthy())
+    expect(apiFetch.mock.calls.map(([url]) => url)).toEqual(["/api/preparation/capture-jd"])
+    expect(screen.queryByRole("link", { name: "去准备" })).toBeNull()
   })
 
   it("收藏岗位：POST 保存成功后显示已收藏与去准备入口", async () => {

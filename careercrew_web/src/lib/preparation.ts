@@ -73,6 +73,21 @@ export async function createOpportunity(input: OpportunityInput): Promise<Opport
   return readData(await apiFetch("/api/preparation/opportunities", post(input)))
 }
 
+/** JD 采集结果：抓取失败不抛错，用 status 表达结果，message 可直接展示。 */
+export interface JdCaptureResult {
+  status: "captured" | "unsupported" | "failed"
+  jd: string
+  message: string
+}
+
+/**
+ * 按岗位链接预取 JD 正文（收藏前调用，或手动录入时一键填充）。
+ * 数据库对 jd 有 NOT NULL 约束，所以取不到 JD 时不能建岗位——由调用方引导手动粘贴。
+ */
+export async function captureJobJd(url: string): Promise<JdCaptureResult> {
+  return readData(await apiFetch("/api/preparation/capture-jd", post({ url })))
+}
+
 export async function updateOpportunity(id: string, input: OpportunityInput): Promise<Opportunity> {
   return readData(await apiFetch(`/api/preparation/opportunities/${encodeURIComponent(id)}`, {
     method: "PUT",

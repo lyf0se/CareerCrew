@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { useSearchParams } from "react-router-dom"
+import { useLocation, useSearchParams } from "react-router-dom"
 import { ArrowLeft, Plus, RefreshCw } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -10,6 +10,7 @@ import { ToastBubble } from "@/components/conversation/ToastBubble"
 import { useToast } from "@/hooks/useToast"
 import { networkErrorText } from "@/lib/errors"
 import {
+  captureJobJd,
   createOpportunity,
   deleteOpportunity,
   listOpportunities,
@@ -30,6 +31,7 @@ import { SharePanel } from "@/components/preparation/SharePanel"
 /** 岗位准备工作台：收藏岗位 → 关联简历版本 → 一键带入简历定制 / 模拟面试。 */
 export default function PreparationPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const location = useLocation()
   const [opportunities, setOpportunities] = useState<Opportunity[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState("")
@@ -46,15 +48,16 @@ export default function PreparationPage() {
     () => opportunities.find((o) => o.id === selectedId) ?? null,
     [opportunities, selectedId],
   )
-  // 通用岗位采集器：书签脚本以 ?collect=1&url=&title=&jd= 打开本页，预填录入表单
+  // 通用岗位采集器（兜底通道）：书签脚本打开本页并预填录入表单。
+  // 载荷放在 URL hash 而不是 query：JD 常有两三千字，query 会撞上服务器请求行长度
+  // 上限（实测容器约 80KB、Vite dev 仅 16KB），而 hash 不参与 HTTP 请求。
+  // query 形式保留兼容——早先保存的书签仍然可用。
   const collectDraft = useMemo(() => {
-    if (searchParams.get("collect") !== "1") return null
-    return {
-      url: searchParams.get("url") || "",
-      title: searchParams.get("title") || "",
-      jd: searchParams.get("jd") || "",
-    }
-  }, [searchParams])
+    const fromHash = new URLSearchParams(location.hash.replace(/^#/, ""))
+    const pick = (key: string) => fromHash.get(key) ?? searchParams.get(key) ?? ""
+    if (pick("collect") !== "1") return null
+    return { url: pick("url"), title: pick("title"), jd: pick("jd") }
+  }, [location.hash, searchParams])
   const [collectConsumed, setCollectConsumed] = useState(false)
 
   useEffect(() => {
@@ -62,7 +65,11 @@ export default function PreparationPage() {
     setCollectConsumed(true)
     select(null)
     setFormMode("create")
-  }, [collectDraft, collectConsumed, loading])
+    // 清掉 hash：否则刷新会再次弹出预填表单
+    if (location.hash.includes("collect=1")) {
+      window.history.replaceState(null, "", location.pathname + location.search)
+    }
+  }, [collectDraft, collectConsumed, loading, location.hash, location.pathname, location.search])
 
   const reload = async () => {
     setLoading(true)
@@ -194,10 +201,12 @@ export default function PreparationPage() {
             className="h-[32px]"
           />
           <details className="rounded-[8px] border border-[var(--border-soft)] bg-card px-2.5 py-1.5 text-[11.5px] text-ink-faint">
-            <summary className="cursor-pointer select-none">通用岗位采集器（任意招聘网站）</summary>
+            <summary className="cursor-pointer select-none">通用岗位采集器（任意招聘网站 · 兜底）</summary>
             <p className="mt-1.5 leading-relaxed">
-              在招聘网站页面上选中 JD 文本，点击书签即可跳回本页预填录入。
-              把下面的代码新建为书签（网址栏粘贴整段）：
+              优先用「职位匹配」里收藏岗位——后端会自动打开详情页采集 JD，无需任何手工操作。
+              这里的书签脚本是兜底通道：在招聘网站上选中 JD 文本后点击书签即可跳回本页预填；
+              <span className="text-ink-soft">没有选中也没关系，脚本会自己从页面里找 JD 正文</span>。
+              用法：把下面的代码新建为书签（网址栏粘贴整段）：
             </p>
             <CollectorBookmarklet />
           </details>
@@ -242,6 +251,14 @@ export default function PreparationPage() {
                 draft={collectDraft}
                 saving={formSaving}
                 error={formError}
+                onCaptureJd={async (jobUrl) => {
+                  const result = await captureJobJd(jobUrl)
+                  if (result.status !== "captured" || !result.jd) {
+                    throw new Error(result.message || "未能采集到 JD 正文")
+                  }
+                  showToast(result.message)
+                  return result.jd
+                }}
                 onSubmit={handleCreate}
                 onCancel={() => { setFormMode(null); setFormError("") }}
               />

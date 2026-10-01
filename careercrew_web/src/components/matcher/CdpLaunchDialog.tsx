@@ -5,10 +5,37 @@ import { Badge } from "@/components/ui/badge"
 import { apiFetch } from "@/lib/auth"
 import type { CdpStatus } from "./CdpStatusBar"
 
+/**
+ * 后端状态接口不可达时（403 等）的兜底文案：此时拿不到后端生成的 setup，
+ * 但用户仍需要看到"怎么在本机把采集浏览器起来"。正常路径以后端 setup 为准。
+ */
+const DEFAULT_SETUP_STEPS = [
+  "在本机新建一个 Chrome 快捷方式（Windows：桌面右键 → 新建 → 快捷方式），位置填下面的启动命令",
+  "用这个快捷方式打开 Chrome，在弹出的窗口里登录 Boss直聘 与 猎聘（只需一次，登录态会保存在专用数据目录）",
+  "让这个窗口保持开着，回到本应用即可自动采集岗位与 JD",
+]
+
+/** 状态接口不可达时也至少给出一条可用的启动命令（与 README 的说明一致）。 */
+const FALLBACK_SETUP_COMMANDS: Record<string, string> = {
+  windows: '"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --remote-debugging-port=9222 --user-data-dir=C:\\ChromeDevData https://www.zhipin.com https://www.liepin.com',
+  macos: '"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9222 --user-data-dir=~/ChromeDevData https://www.zhipin.com https://www.liepin.com',
+  linux: "google-chrome --remote-debugging-port=9222 --user-data-dir=~/.careercrew-chrome https://www.zhipin.com https://www.liepin.com",
+}
+
+/** 按用户浏览器所在平台挑命令——后端可能在 Linux 容器里，不能拿后端平台当准。 */
+function clientPlatform(): string {
+  const ua = (navigator.userAgent || "").toLowerCase()
+  if (ua.includes("windows")) return "windows"
+  if (ua.includes("mac os") || ua.includes("macintosh")) return "macos"
+  return "linux"
+}
+
 interface CdpLaunchDialogProps {
   open: boolean
   onClose: () => void
   status: CdpStatus | null
+  /** 状态接口不可用时的原因（403 等），与"未启动"是两回事，必须分开说明 */
+  unavailableReason?: string
   onStatusUpdate: (status: CdpStatus) => void
   onToast?: (msg: string) => void
 }
@@ -17,12 +44,15 @@ export function CdpLaunchDialog({
   open,
   onClose,
   status,
+  unavailableReason,
   onStatusUpdate,
   onToast,
 }: CdpLaunchDialogProps) {
   const [copied, setCopied] = useState(false)
   const [checking, setChecking] = useState(false)
   const [launching, setLaunching] = useState(false)
+  /** 后端不在宿主机（容器部署）时一键唤起必然失败，直接切到手动设置说明 */
+  const [manualOnly, setManualOnly] = useState(false)
 
   const checkStatus = async () => {
     setChecking(true)
@@ -45,6 +75,12 @@ export function CdpLaunchDialog({
       const res = await apiFetch("/api/browser/launch-cdp", { method: "POST" })
       const data = await res.json()
       onToast?.(data.message || "已尝试启动 Chrome 采集器")
+      // 容器部署下后端无法代启宿主机浏览器：不再空轮询，直接给出本机设置步骤
+      if (data.status === "manual_required" || data.status === "error") {
+        setManualOnly(true)
+        setLaunching(false)
+        return
+      }
       // 轮询几次检测端口
       let count = 0
       const timer = setInterval(async () => {
@@ -67,14 +103,25 @@ export function CdpLaunchDialog({
         }
       }, 1500)
     } catch {
-      onToast?.("启动请求失败，请手动运行脚本")
+      onToast?.("启动请求失败，请改用下面的本机设置步骤")
+      setManualOnly(true)
       setLaunching(false)
     }
   }
 
+  const setup = status?.setup
+  // 优先"本机启动采集浏览器"的完整命令（容器部署下唯一可行的方式），
+  // 平台以客户端为准：后端在容器里时用它的平台会给出错误的命令。
+  const platform = clientPlatform()
+  const setupCommand =
+    setup?.commands?.[platform]
+    ?? setup?.commands?.[setup?.default_platform ?? ""]
+    ?? FALLBACK_SETUP_COMMANDS[platform]
+    ?? FALLBACK_SETUP_COMMANDS.linux
+  const copyTarget = setupCommand || status?.command || "powershell -ExecutionPolicy Bypass -File scripts/start_chrome_cdp.ps1"
+
   const handleCopy = () => {
-    const cmd = status?.command || "powershell -ExecutionPolicy Bypass -File scripts/start_chrome_cdp.ps1"
-    navigator.clipboard.writeText(cmd).then(() => {
+    navigator.clipboard.writeText(copyTarget).then(() => {
       setCopied(true)
       onToast?.("已复制启动命令到剪贴板")
       setTimeout(() => setCopied(false), 2000)
@@ -166,35 +213,49 @@ export function CdpLaunchDialog({
             </div>
           ) : (
             <div className="flex flex-col gap-3.5">
-              <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 p-3">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-xs font-medium text-foreground">方式一：一键自动唤起 Chrome</span>
-                  <span className="text-[11px] text-muted-foreground">调用后台进程调起独立数据目录的调试浏览器</span>
+              {(unavailableReason || manualOnly) && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>{unavailableReason || "后端不在宿主机上运行（容器部署），无法代你启动浏览器；按下面的步骤在本机启动即可。"}</span>
                 </div>
-                <Button size="sm" variant="default" className="h-8 gap-1.5 px-3 text-xs" onClick={handleLaunch} disabled={launching}>
-                  {launching ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5 fill-current" />}
-                  {launching ? "正在唤起…" : "一键启动 Chrome"}
-                </Button>
-              </div>
+              )}
 
               <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/40 p-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-foreground">方式二：终端执行启动命令</span>
+                  <span className="text-xs font-medium text-foreground">一次性设置：启动采集专用 Chrome</span>
                   <Button size="sm" variant="outline" className="h-6 gap-1 px-2 text-[11px]" onClick={handleCopy}>
                     {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
-                    {copied ? "已复制" : "复制命令"}
+                    {copied ? "已复制" : "复制启动命令"}
                   </Button>
                 </div>
+                <ol className="flex flex-col gap-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                  {(setup?.steps ?? DEFAULT_SETUP_STEPS).map((step, index) => (
+                    <li key={step} className="flex gap-1.5">
+                      <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-medium text-primary">
+                        {index + 1}
+                      </span>
+                      <span>{step}</span>
+                    </li>
+                  ))}
+                </ol>
                 <div className="flex items-center gap-2 rounded border border-border/60 bg-background px-2.5 py-1.5 font-mono text-[11px] text-muted-foreground">
                   <Terminal className="h-3.5 w-3.5 shrink-0 text-primary/70" />
-                  <span className="truncate">{status?.command || "powershell -ExecutionPolicy Bypass -File scripts/start_chrome_cdp.ps1"}</span>
+                  <span className="truncate" title={copyTarget}>{copyTarget}</span>
                 </div>
               </div>
 
-              <div className="rounded-lg border border-dashed border-border/80 p-3 text-[11px] leading-relaxed text-muted-foreground">
-                <span className="font-semibold text-foreground">方式三（推荐双击）：</span>
-                在项目根目录下直接双击运行 <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground">{status?.bat_path || "scripts\\start_chrome_cdp.bat"}</code>，窗口启动后分别登录 Boss 直聘与猎聘即可。
-              </div>
+              {!manualOnly && (
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 p-3">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-xs font-medium text-foreground">后端与浏览器在同一台机器上？</span>
+                    <span className="text-[11px] text-muted-foreground">可直接由后端唤起带调试端口的 Chrome（容器部署不适用）</span>
+                  </div>
+                  <Button size="sm" variant="default" className="h-8 shrink-0 gap-1.5 px-3 text-xs" onClick={handleLaunch} disabled={launching}>
+                    {launching ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5 fill-current" />}
+                    {launching ? "正在唤起…" : "一键启动 Chrome"}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </div>
