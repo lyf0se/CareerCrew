@@ -13,9 +13,13 @@ def _store(valid_config_data: dict, collection: str | None = None) -> QdrantStor
 
 def test_roundtrip(valid_config_data: dict) -> None:
     store = _store(valid_config_data)
+    # p001 用与查询正交的稠密向量。常量向量（如 [0.1]*1024）彼此平行，余弦相似度
+    # 理论值恒为 1.0，dense 路名次就只由 float32 舍入噪声决定——本地 numpy 2.5.1
+    # 与 CI 的 2.5.3 给出相反结果，让本用例成为跨版本定时炸弹。
+    orthogonal = [1.0 if i % 2 == 0 else -1.0 for i in range(1024)]
     store.upsert([
         VectorRecord(
-            id="doc1_p001", dense=[0.1] * 1024, sparse={1: 0.5, 2: 0.3},
+            id="doc1_p001", dense=orthogonal, sparse={1: 0.5, 2: 0.3},
             text="页面一：RAG 混合检索",
             metadata={"doc": "doc1", "page": 1, "type": "page",
                       "source": "t.md", "image_path": "F:/x/p1.png"},

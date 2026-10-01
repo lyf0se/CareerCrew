@@ -13,6 +13,18 @@ import requests
 from scripts import backup_restore
 
 
+@pytest.fixture(autouse=True)
+def _no_local_postgres_client(monkeypatch):
+    """让本模块与宿主机是否装了 PostgreSQL 客户端彻底解耦。
+
+    ``verify_backup`` 会探测 PATH 上的 ``pg_restore`` 并对归档跑 ``--list``
+    校验。本模块用假 dump runner 造出的归档不是真实 dump，永远过不了该校验；
+    而 GitHub runner 预装 postgresql-client，校验会真的执行并抢先于被测的
+    清理/编排逻辑失败——同一份代码本地全绿、CI 必红的根源。
+    """
+    monkeypatch.setattr(backup_restore.shutil, "which", lambda _name: None)
+
+
 def test_backup_rejects_inherited_libpq_routing(monkeypatch):
     monkeypatch.setenv("PGHOSTADDR", "203.0.113.99")
     with pytest.raises(backup_restore.BackupValidationError, match="routing"):
