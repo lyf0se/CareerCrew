@@ -100,9 +100,15 @@ memory:
 
 tools:
   search:
-    boss_cdp_url: ""              # Boss直聘 CDP 后端（N1）：容器内填 http://host.docker.internal:9222
-                                  # （宿主机 Chrome --remote-debugging-port=9222）；空=仅猎聘 MCP 渠道
+    boss_cdp_url: "http://host.docker.internal:9222"
+                                  # 容器内指向宿主机 Chrome 的调试端口（N1）：
+                                  # 宿主机以 --remote-debugging-port=9222 启动 Chrome。
+                                  # 空=两条渠道（Boss 与猎聘）都禁用——猎聘同样已 CDP 化。
     boss_city: ""                 # 可选城市代码（如北京 101010100）；空=全国
+  browser:
+    # 容器里看到的客户端 IP 是网桥网关（如 172.18.0.1），不是 loopback；
+    # 用 container 放行私有网段，与 compose 的 127.0.0.1 端口绑定配对使用。
+    local_guard: container
   registry:
     internal: [rag_query, memory_search, memory_write, profile_update, search_jobs, salary_query, read_image, submit_application]
     mcp: [google_mcp]

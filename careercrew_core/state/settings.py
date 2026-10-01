@@ -19,7 +19,7 @@ from typing import Any
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, field_validator
 
 # ── 默认配置路径：careercrew_core/state/settings.py -> parents[2] = 项目根 ──
 # 容器部署可用 CAREERCREW_SETTINGS_PATH 指向 config/settings.docker.yaml 等变体
@@ -221,10 +221,32 @@ class SearchSettings(BaseModel):
     boss_city: str = ""     # 可选城市代码（如北京 101010100）；空=全国
 
 
+class BrowserAccessSettings(BaseModel):
+    """宿主机 Chrome 控制接口（/api/browser/*）的来源校验策略。
+
+    strict：只放行 loopback——后端与 Chrome 同机直跑时使用。
+    container：后端跑在容器里，经端口映射进来的请求，客户端 IP 是网桥网关
+        （如 172.18.0.1）而非 loopback，需要额外放行 RFC1918 私有地址。
+        该策略只放宽"来自本机局域网"这一层；公网不可达由 compose 把发布端口
+        绑定到 127.0.0.1 保证，两者必须同时成立。
+    """
+
+    local_guard: str = "strict"
+
+    @field_validator("local_guard")
+    @classmethod
+    def known_guard_mode(cls, value: str) -> str:
+        mode = (value or "").strip().lower() or "strict"
+        if mode not in {"strict", "container"}:
+            raise ValueError("tools.browser.local_guard 只能是 strict 或 container")
+        return mode
+
+
 class ToolsSettings(BaseModel):
     registry: RegistrySettings
     hitl: ToolsHitlSettings
     search: SearchSettings = SearchSettings()
+    browser: BrowserAccessSettings = BrowserAccessSettings()
 
 
 class HitlSettings(BaseModel):
