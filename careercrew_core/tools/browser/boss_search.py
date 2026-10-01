@@ -11,6 +11,7 @@ from typing import Any
 from urllib.parse import quote_plus
 
 from careercrew_core.tools.browser.cdp import open_boss_page
+from careercrew_core.tools.browser.job_detail import extract_jd_with_retry
 from careercrew_core.tools.browser.patterns import BOSS_CITY_CODES, BOSS_PATTERNS
 from careercrew_core.tools.browser.throttle import human_pause
 
@@ -77,7 +78,7 @@ def parse_job_cards(cards: list[Any]) -> list[dict]:
             "city": _text(card, f["area"]),
             "salary": _decode_salary(_text(card, f["salary"])),
             "experience": " | ".join(exp_parts),
-            "jd": "",                      # 列表页无 JD 正文；详情按需再抓（MVP 不做）
+            "jd": "",                      # 列表页无 JD 正文；收藏时由详情页抓取补全
             "url": url,
             "source": "boss",
         })
@@ -144,3 +145,28 @@ def search_boss_jobs(
         jobs = parse_job_cards(list(cards)[:raw_limit])
         logger.info("boss search %r -> %d jobs (from %d cards)", direction, len(jobs), len(cards))
         return jobs
+
+
+def parse_boss_detail(page: Any) -> str:
+    """从已打开的 Boss 岗位详情页抽 JD 正文（抽不到返回空串）。"""
+    return extract_jd_with_retry(page, BOSS_PATTERNS)
+
+
+def fetch_boss_job_detail(job_url: str, cdp_url: str = "") -> str:
+    """打开 Boss 岗位详情页抓 JD 正文。
+
+    风控验证页显式抛错（错误信息可直接给用户看）；抽不到正文返回空串，
+    由调用方决定"JD 留空可重试"而不阻断收藏。
+    """
+    url = (job_url or "").strip()
+    if not url:
+        raise ValueError("job_url 为空：无法抓取 JD")
+
+    with open_boss_page(cdp_url) as page:
+        page.goto(url, timeout=30000, wait_until="domcontentloaded")
+        human_pause()
+        if _looks_blocked(page):
+            raise RuntimeError("Boss直聘命中安全验证，请手动通过验证后重试")
+        jd = parse_boss_detail(page)
+        logger.info("boss detail %s -> %d chars", url, len(jd))
+        return jd

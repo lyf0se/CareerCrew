@@ -21,6 +21,25 @@ BOSS_PATTERNS: dict = {
         # 经验/学历等标签（拼为 experience 字段）
         "experience": ".tag-list li, .filter-labels li",
     },
+    # JD 正文容器：按优先级尝试，取第一个文本长度达标的候选
+    "jd_selectors": [
+        ".job-sec-text",
+        ".job-detail-section .job-sec-text",
+        ".job-detail-section .text",
+        ".job-detail .text",
+        ".job-detail-section",
+        ".detail-content .text",
+        "[class*='job-sec-text']",
+    ],
+    # 选择器全部失效时的兜底：找"含 JD 关键词且文本足够长"的最小容器。
+    # 站点改版只改类名不改业务措辞，这条比类名选择器更耐改版。
+    "jd_keywords": [
+        "岗位职责", "职位描述", "工作职责", "任职要求",
+        "任职资格", "职位要求", "岗位要求", "工作内容",
+    ],
+    "jd_min_chars": 80,
+    # 兜底扫描时的候选块级元素（在全页范围内找最小达标容器）
+    "jd_block_scan": "div, section, article, main",
     # 未登录/风控验证页特征：命中即判定渠道不可用而非空结果
     "block_markers": [".nc_iconfont.btn_slide", "#wrap .btn-next", "text=安全验证", ".geetest_panel"],
 }
@@ -105,6 +124,23 @@ LIEPIN_PATTERNS: dict = {
         "area": "a[data-nick='job-detail-job-info'] span.ellipsis-1, .job-dq-box, [class*='job-dq']",
         "link": "a[data-nick='job-detail-job-info'], a[href*='/job/'], a[href*='/lptjob/']",
     },
+    # JD 正文容器：按优先级尝试，取第一个文本长度达标的候选
+    "jd_selectors": [
+        ".job-intro-container .paragraph",
+        ".job-intro-container",
+        ".job-description",
+        "#job-intro",
+        ".job-detail-box .paragraph",
+        "[class*='job-intro']",
+    ],
+    # 选择器全部失效时的兜底（同 BOSS_PATTERNS 的说明）
+    "jd_keywords": [
+        "岗位职责", "职位描述", "工作职责", "任职要求",
+        "任职资格", "职位要求", "岗位要求", "工作内容",
+    ],
+    "jd_min_chars": 80,
+    # 兜底扫描时的候选块级元素（在全页范围内找最小达标容器）
+    "jd_block_scan": "div, section, article, main",
     # 风控验证页特征：命中即判定渠道进入验证墙
     "block_markers": [
         "text=安全中心-验证码",

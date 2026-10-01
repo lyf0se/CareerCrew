@@ -12,6 +12,15 @@ from careercrew_core.tools.browser.boss_search import (
     _looks_blocked,
     parse_job_cards,
 )
+from careercrew_core.tools.browser.cdp import resolve_cdp_url
+from careercrew_core.tools.browser.job_detail import (
+    MAX_JD_CHARS,
+    channel_for_url,
+    clean_jd_text,
+    extract_jd,
+    extract_jd_with_retry,
+    fetch_job_jd,
+)
 from careercrew_core.tools.browser.throttle import gauss_delay_ms
 from careercrew_core.tools.internal.search_jobs import make_search_jobs_tool
 
@@ -254,3 +263,161 @@ def test_parse_liepin_job_cards() -> None:
     assert j["salary_k"] == {"min_k": 15.0, "max_k": 20.0, "months": None}
     assert "1984882287.shtml" in j["url"]
 
+
+
+# ── JD 详情页抽取与清洗（收藏时按需补全快照） ──
+
+_JD_BODY = (
+    "岗位职责\n1、参与系统架构设计与技术选型，负责业务系统后端功能模块的设计、编码实现；\n"
+    "2、参与跨境电商供应链信息化、自动化建设，包括 SRM、ERP、WMS 等；\n"
+    "任职要求\n1、本科及以上学历，5 年 Java 实际项目开发经验；"
+)
+
+
+class FakeDetailPage:
+    """详情页桩：选择器 → 节点映射，可给出兜底扫描块。"""
+
+    def __init__(self, by_selector: dict | None = None, blocks: list | None = None):
+        self._by_selector = by_selector or {}
+        self._blocks = blocks or []
+        self.waits = 0
+
+    def query_selector(self, sel: str):
+        return self._by_selector.get(sel)
+
+    def query_selector_all(self, sel: str):
+        return list(self._blocks)
+
+    def wait_for_timeout(self, ms: int) -> None:
+        self.waits += 1
+
+
+def test_clean_jd_strips_invisible_and_control_chars() -> None:
+    raw = "岗位职责\u200b：\n\n\n\n  负责\u3000\u3000后端开发\x0c；\n任职要求\ufeff：\r\n\r\n1、本科"
+    cleaned = clean_jd_text(raw)
+    for junk in ("\u200b", "\ufeff", "\x0c", "\u3000", "\r"):
+        assert junk not in cleaned
+    assert "\n\n\n" not in cleaned
+    assert cleaned.startswith("岗位职责：")
+
+
+def test_cleaned_jd_passes_opportunity_validation() -> None:
+    """清洗结果必须能直接入库：OpportunityInput 会拒收控制字符。"""
+    from careercrew_core.preparation.models import OpportunityInput
+
+    cleaned = clean_jd_text("岗位职责\x0c\u200b\n\n\n  负责\u3000后端\x1f开发" * 3)
+    payload = OpportunityInput(company="某公司", title="后端工程师", jd=cleaned)
+    assert payload.jd == cleaned
+
+
+def test_jd_truncated_to_model_limit() -> None:
+    from careercrew_core.preparation.models import OpportunityInput
+
+    jd = clean_jd_text("测" * (MAX_JD_CHARS + 500))
+    assert len(jd) == MAX_JD_CHARS
+    OpportunityInput(company="某公司", title="后端工程师", jd=jd)   # 不抛异常即通过
+
+
+def test_extract_jd_uses_first_selector_hit() -> None:
+    page = FakeDetailPage(by_selector={".job-sec-text": FakeEl(text=_JD_BODY)})
+    jd = extract_jd(page, {"jd_selectors": [".job-sec-text", ".other"], "jd_min_chars": 80})
+    assert jd.startswith("岗位职责")
+    assert "跨境电商" in jd
+
+
+def test_extract_jd_skips_too_short_candidate() -> None:
+    """容器命中但文本过短（如只抓到标题）时继续往下试，不能当成 JD。"""
+    page = FakeDetailPage(by_selector={
+        ".job-sec-text": FakeEl(text="后端工程师"),
+        ".job-detail-section .text": FakeEl(text=_JD_BODY),
+    })
+    jd = extract_jd(page, {
+        "jd_selectors": [".job-sec-text", ".job-detail-section .text"], "jd_min_chars": 80,
+    })
+    assert "任职要求" in jd
+
+
+def test_extract_jd_falls_back_to_smallest_keyword_block() -> None:
+    """类名全部失效时，按业务措辞定位，且取最小容器（避开包住整页的超大节点）。"""
+    page = FakeDetailPage(blocks=[
+        FakeEl(text="导航 登录 首页 " + _JD_BODY + " 相关推荐 " * 20),   # 大容器
+        FakeEl(text=_JD_BODY),                                          # 最小达标容器
+        FakeEl(text="公司简介 " + "介绍" * 200),                         # 无 JD 措辞
+    ])
+    jd = extract_jd(page, {
+        "jd_selectors": [".gone"], "jd_keywords": ["岗位职责", "任职要求"],
+        "jd_min_chars": 80, "jd_block_scan": "div, section, article, main",
+    })
+    assert jd == _JD_BODY
+
+
+def test_extract_jd_returns_empty_when_nothing_matches() -> None:
+    page = FakeDetailPage(blocks=[FakeEl(text="登录后查看")])
+    assert extract_jd(page, {
+        "jd_selectors": [".gone"], "jd_keywords": ["岗位职责"],
+        "jd_min_chars": 80, "jd_block_scan": "div",
+    }) == ""
+
+
+def test_extract_jd_retries_before_giving_up() -> None:
+    """正文常晚于 domcontentloaded 渲染：给几次机会，但不无限等。"""
+    class LatePage(FakeDetailPage):
+        def __init__(self) -> None:
+            super().__init__()
+            self.ready = False
+
+        def query_selector(self, sel: str):
+            return FakeEl(text=_JD_BODY) if self.ready else None
+
+        def wait_for_timeout(self, ms: int) -> None:
+            self.waits += 1
+            self.ready = True
+
+    page = LatePage()
+    jd = extract_jd_with_retry(page, {"jd_selectors": [".job-sec-text"], "jd_min_chars": 80})
+    assert jd == _JD_BODY
+    assert page.waits == 1
+
+    empty = FakeDetailPage()
+    assert extract_jd_with_retry(empty, {"jd_selectors": [".gone"], "jd_min_chars": 80},
+                                 attempts=3) == ""
+    assert empty.waits == 2      # 最后一次不再空等
+
+
+def test_channel_for_url_routes_known_sources_only() -> None:
+    assert channel_for_url("https://www.zhipin.com/job_detail/x.html") == "boss"
+    assert channel_for_url("https://m.zhipin.com/job/1") == "boss"
+    assert channel_for_url("https://www.liepin.com/lptjob/1.shtml") == "liepin"
+    assert channel_for_url("https://example.com/job/1") == ""
+    assert channel_for_url("") == ""
+
+
+def test_fetch_job_jd_unknown_source_makes_no_request() -> None:
+    """未知来源直接返回空串，不打开浏览器（避免对无关链接发起采集）。"""
+    assert fetch_job_jd("https://example.com/job/1", cdp_url="http://127.0.0.1:9222") == ""
+
+
+# ── CDP 端点解析：Chrome 拒绝域名形式的 Host 头 ──
+
+def test_resolve_cdp_url_replaces_dns_with_ip(monkeypatch) -> None:
+    """容器访问宿主机只能用 host.docker.internal，但 Chrome 拒绝该域名的 Host 头。"""
+    monkeypatch.setattr("socket.gethostbyname", lambda host: "192.168.65.254")
+    assert resolve_cdp_url("http://host.docker.internal:9222") == "http://192.168.65.254:9222"
+
+
+def test_resolve_cdp_url_keeps_ip_and_localhost(monkeypatch) -> None:
+    def boom(host):        # 不应被调用
+        raise AssertionError(f"无需解析: {host}")
+
+    monkeypatch.setattr("socket.gethostbyname", boom)
+    assert resolve_cdp_url("http://127.0.0.1:9222") == "http://127.0.0.1:9222"
+    assert resolve_cdp_url("http://localhost:9222") == "http://localhost:9222"
+    assert resolve_cdp_url("") == ""
+
+
+def test_resolve_cdp_url_keeps_url_when_dns_fails(monkeypatch) -> None:
+    def boom(host):
+        raise OSError("nxdomain")
+
+    monkeypatch.setattr("socket.gethostbyname", boom)
+    assert resolve_cdp_url("http://nope.invalid:9222") == "http://nope.invalid:9222"

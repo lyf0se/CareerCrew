@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import quote_plus
 
 from careercrew_core.tools.browser.cdp import open_cdp_page
+from careercrew_core.tools.browser.job_detail import extract_jd_with_retry
 from careercrew_core.tools.browser.patterns import LIEPIN_CITY_CODES, LIEPIN_PATTERNS
 from careercrew_core.tools.browser.throttle import human_pause
 from careercrew_core.tools.jobs.salary_parser import parse_salary_range
@@ -155,7 +156,7 @@ def parse_liepin_job_cards(cards: list[Any]) -> list[dict]:
             "salary": salary,
             "salary_k": parse_salary_range(salary),
             "experience": " | ".join(exp_parts),
-            "jd": "",
+            "jd": "",                      # 列表页无 JD 正文；收藏时由详情页抓取补全
             "raw": raw[:500],
             "url": url,
             "source": "liepin",
@@ -237,3 +238,24 @@ def search_liepin_jobs(
         jobs = parse_liepin_job_cards(list(cards)[:raw_limit])
         logger.info("liepin search %r -> %d jobs (from %d cards)", direction, len(jobs), len(cards))
         return jobs
+
+
+def parse_liepin_detail(page: Any) -> str:
+    """从已打开的猎聘岗位详情页抽 JD 正文（抽不到返回空串）。"""
+    return extract_jd_with_retry(page, LIEPIN_PATTERNS)
+
+
+def fetch_liepin_job_detail(job_url: str, cdp_url: str = "") -> str:
+    """打开猎聘岗位详情页抓 JD 正文；语义同 fetch_boss_job_detail。"""
+    url = (job_url or "").strip()
+    if not url:
+        raise ValueError("job_url 为空：无法抓取 JD")
+
+    with open_cdp_page(cdp_url) as page:
+        page.goto(url, timeout=30000, wait_until="domcontentloaded")
+        human_pause()
+        if _looks_blocked(page):
+            raise RuntimeError("猎聘命中安全验证，请在浏览器中手动完成验证后重试")
+        jd = parse_liepin_detail(page)
+        logger.info("liepin detail %s -> %d chars", url, len(jd))
+        return jd

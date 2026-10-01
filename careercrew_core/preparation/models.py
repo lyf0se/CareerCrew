@@ -63,6 +63,26 @@ class Opportunity(OpportunityInput):
     updated_at: datetime
 
 
+class JdCaptureInput(PreparationInput):
+    """JD 预取请求：只需要一个岗位链接（收藏前调用，此时还没有岗位记录）。"""
+
+    url: str = Field(default="", max_length=2000)
+
+
+class JdCaptureResult(BaseModel):
+    """JD 采集结果：抓取失败不抛错，由 status 表达，message 可直接展示给用户。
+
+    captured=已取到正文 / unsupported=来源不在可自动采集范围 /
+    failed=采集失败（可稍后重试，或改为手动粘贴）。
+    jd 仅在 captured 时非空；数据库对 jd 有 NOT NULL 约束，因此必须"先取到
+    JD 再建岗位"，这也是本接口独立于创建接口的原因。
+    """
+
+    status: Literal["captured", "unsupported", "failed"]
+    jd: str = ""
+    message: str
+
+
 class ResumeVersionInput(PreparationInput):
     label: str = Field(min_length=1, max_length=120)
     content: str = Field(min_length=1, max_length=50000)
