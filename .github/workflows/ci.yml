@@ -1,7 +1,7 @@
 # CareerCrew CI：分层流水线（快速单测 / API / Postgres / 类型编译检查 / 前端构建）
 # + PR 变更行 80% 覆盖率门禁（diff-cover）+ docker 镜像构建冒烟 + 依赖漏洞审计
 # + nightly integration/e2e。
-# 重 ML 栈（FlagEmbedding / torch / BGE-M3）由本地 conda env 验证（DEV_SPEC §4.4）。
+# 重 ML 栈（FlagEmbedding / torch / BGE-M3）由本地 uv venv 验证（DEV_SPEC §4.4）。
 #
 # 版本口径说明：各 job 手写的轻量依赖清单是「CI 已验证的已知可用版本集」，
 # 均不低于 pyproject.toml 的声明下限；调整任一侧时需同步核对另一侧。

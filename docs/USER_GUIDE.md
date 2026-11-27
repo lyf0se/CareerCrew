@@ -7,7 +7,7 @@
 | 组件 | 版本/位置 | 说明 |
 | --- | --- | --- |
 | Docker Desktop | 已启动 | 提供 PostgreSQL 16 与 Qdrant v1.19.0 |
-| Python 环境 | `F:\Python_develop\miniconda3\envs\careercrew\python.exe` | 后端与脚本都用它 |
+| Python 环境 | uv 管理：项目内 `.venv`（`uv sync --all-extras` 建立，`uv.lock` 锁定版本） | 后端与脚本用 `uv run ...` 执行 |
 | Node.js | 仓库内 `careercrew_web/node_modules` 已装好 | 前端开发/构建 |
 | 配置文件 | `.env`（本机）+ `config/settings.yaml` | `.env.example` 是可提交的模板 |
 
@@ -18,8 +18,8 @@
 docker compose up -d postgres qdrant
 
 # 2) 后端（首次会惰性初始化模型，较慢）
-cd F:\agent_develop\CareerCrew
-F:/Python_develop/miniconda3/envs/careercrew/python.exe -m uvicorn careercrew_api.main:app --reload --port 8000
+cd "<仓库根目录>"
+uv run uvicorn careercrew_api.main:app --reload --port 8000
 
 # 3) 前端开发服务器
 cd careercrew_web
@@ -115,13 +115,13 @@ docker compose up -d --build      # 容器启动先跑 alembic upgrade head，�
 
 ```powershell
 # 备份（PostgreSQL + Qdrant + uploads/parsed，自动校验并写入 manifest）
-F:/Python_develop/miniconda3/envs/careercrew/python.exe -c "from scripts import backup_restore as b; print(b.create_backup(database_url=..., qdrant_url='http://127.0.0.1:6333'))"
+uv run python -c "from scripts import backup_restore as b; print(b.create_backup(database_url=..., qdrant_url='http://127.0.0.1:6333'))"
 
 # 本地发布预演（含隔离恢复演练）
 $env:CAREERCREW_RELEASE_RESTORE_DRILL = "1"
 $env:RESTORE_DATABASE_URL = "postgresql://careercrew:careercrew@localhost:5432/careercrew_restore_control"
 $env:RESTORE_QDRANT_URL = "http://127.0.0.1:6333"
-F:/Python_develop/miniconda3/envs/careercrew/python.exe scripts/release_acceptance.py `
+uv run python scripts/release_acceptance.py `
   --backup-dir data/backups/careercrew-YYYYMMDD-HHMMSS `
   --report data/reports/local-release-acceptance.json
 ```
@@ -129,16 +129,16 @@ F:/Python_develop/miniconda3/envs/careercrew/python.exe scripts/release_acceptan
 **8. 自检命令**
 
 ```powershell
-F:/Python_develop/miniconda3/envs/careercrew/python.exe -m ruff check careercrew_ai careercrew_core careercrew_api careercrew_mcp tests scripts
-F:/Python_develop/miniconda3/envs/careercrew/python.exe scripts/validate_migrations.py --static
-F:/Python_develop/miniconda3/envs/careercrew/python.exe scripts/eval_runner.py --offline --compare data/eval/baseline.json --fail-on-regression
+uv run ruff check careercrew_ai careercrew_core careercrew_api careercrew_mcp tests scripts
+uv run python scripts/validate_migrations.py --static
+uv run python scripts/eval_runner.py --offline --compare data/eval/baseline.json --fail-on-regression
 cd careercrew_web; npm run test; npm run lint; npm run build
 ```
 
 后端全量测试用一次性库（跑完自动删除）：
 
 ```powershell
-F:/Python_develop/miniconda3/envs/careercrew/python.exe -m pytest tests -q
+uv run pytest tests -q
 # 需要 PostgreSQL 集成用例时，另建一次性库并设置 POSTGRES_TEST_DSN / DATABASE_URL
 ```
 

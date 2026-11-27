@@ -10,7 +10,6 @@ dist/
 # Virtual env
 .venv/
 venv/
-uv.lock
 env/
 
 # IDE

@@ -10,7 +10,7 @@
     },
     {
       "name": "api",
-      "runtimeExecutable": "F:\\Python_develop\\miniconda3\\envs\\careercrew\\Scripts\\uvicorn.exe",
+      "runtimeExecutable": ".venv\\Scripts\\uvicorn.exe",
       "runtimeArgs": ["careercrew_api.main:app", "--reload", "--port", "8000"],
       "port": 8000
     }

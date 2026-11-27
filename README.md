@@ -129,11 +129,15 @@ curl http://localhost:8000/readyz
 ### 4. 本地开发：安装依赖
 
 ```bash
-# 后端（核心依赖 + Web + 测试工具链；含 FlagEmbedding/torch 等重 ML 栈，首次安装体积较大）
-pip install -e ".[dev,web]"
-# 可选：答案级评估（Ragas）
-pip install -e ".[eval]"
+# 后端（uv 管理：按 uv.lock 复现环境；含 FlagEmbedding/torch 等重 ML 栈，首次安装体积较大）
+uv sync --all-extras
+# 日常命令用 uv run 前缀在 .venv 中执行，例如：
+uv run uvicorn careercrew_api.main:app --reload --port 8000
 ```
+
+> 环境已从 conda（`miniconda3\envs\careercrew`）迁移到 uv（项目内 `.venv`，
+> 依赖锁定在 `uv.lock`）。`uv sync --all-extras` 安装核心依赖与 dev / web /
+> eval 全部附加组；`uv lock` 负责升级并重新锁定依赖。
 
 ```bash
 # 前端

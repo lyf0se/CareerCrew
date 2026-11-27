@@ -2133,8 +2133,9 @@ langsmith:
 ### 9.1 环境准备
 
 ```bash
-# conda env careercrew（Python 3.12，已建好）
-conda activate careercrew
+# uv 管理环境（Python 3.12，项目内 .venv；uv.lock 锁定依赖版本）
+# 2026-11-27 起从 conda env careercrew 迁移到 uv
+uv sync --all-extras
 # BGE-M3 模型已下至 F:/AI_models/BAAI--bge-m3/snapshots/master（ModelScope，HF 直连被拦）
 # 对应 settings.yaml 的 embedding.model_path
 ```
@@ -2157,23 +2158,23 @@ export MINERU_API_KEY="xxx"                    # MinerU 云端解析（rag.loade
 ### 9.3 运行
 
 ```bash
-conda run -n careercrew uvicorn careercrew_api.main:app --reload --port 8000  # FastAPI 后端
+uv run uvicorn careercrew_api.main:app --reload --port 8000          # FastAPI 后端
 cd careercrew_web && npm run dev                                          # React 前端（Vite，:5176 代理 /api）
 npm run build                                                  # 构建生产产物 careercrew_web/dist（FastAPI 单端口托管）
-conda run -n careercrew python -m careercrew_mcp               # 多模态 RAG MCP Server（stdio）
-conda run -n careercrew python scripts/ingest_knowledge.py     # 知识库摄取（多模态 pipeline）
-conda run -n careercrew python scripts/langsmith_smoke.py --list  # LangSmith 根 run 只读列出
+uv run python -m careercrew_mcp                                  # 多模态 RAG MCP Server（stdio）
+uv run python scripts/ingest_knowledge.py                         # 知识库摄取（多模态 pipeline）
+uv run python scripts/langsmith_smoke.py --list                   # LangSmith 根 run 只读列出
 ```
 
 ### 9.4 测试
 
 ```bash
-conda run -n careercrew pytest -q tests/unit/         # 单元（秒级）
-conda run -n careercrew pytest -q tests/integration/  # 集成（多组件协作）
-conda run -n careercrew pytest -q tests/e2e/          # 端到端（求职闭环）
+uv run pytest -q tests/unit/         # 单元（秒级）
+uv run pytest -q tests/integration/  # 集成（多组件协作）
+uv run pytest -q tests/e2e/          # 端到端（求职闭环）
 ```
 
-> 所有 python/pytest 命令都在 conda env `careercrew` 下（`conda activate careercrew` 或 `conda run -n careercrew ...`）。
+> 所有 python/pytest 命令都在 uv 管理的项目 `.venv` 下执行（`uv run ...`，或先 `.venv\Scripts\activate`）。
 
 ---
 

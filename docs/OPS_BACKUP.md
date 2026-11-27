@@ -44,8 +44,8 @@ python scripts/backup_restore.py verify data/backups/careercrew-20260909-020000
 
 ```powershell
 .\scripts\install_backup_schedule.ps1 `
-  -PythonPath "F:\Python_develop\miniconda3\envs\careercrew\python.exe" `
-  -RepositoryRoot "F:\agent_develop\CareerCrew"
+  -PythonPath "<仓库根目录>\.venv\Scripts\python.exe" `
+  -RepositoryRoot "<仓库根目录>"
 ```
 
 也可以显式指定 `-TaskName`、`-DailyTime HH:mm` 和 `-RetentionDays`。任务动作只包含 Python 路径、脚本路径和保留天数；连接串仍从任务运行环境的 `.env`/环境变量读取。脚本默认不会覆盖同名计划任务；确认需要替换时才追加 `-AllowOverwrite`。
