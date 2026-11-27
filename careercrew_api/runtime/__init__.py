@@ -1,6 +1,6 @@
 """运行时编排中心（原单文件 runtime.py 的包化拆分，对外导入路径不变）。
 
-拆分布局（纯搬家不改行为，见 docs/TECH_DEBT_PLAN.md #6）：
+拆分布局（纯搬家不改行为，见 docs/架构与规划/技术债务计划.md #6）：
 - common.py        模块级 helper + 异常 + logger
 - heavy.py         HeavyInitMixin：两级惰性初始化（_ensure_stores 轻量存储 / _ensure_heavy AI 重组件）
 - lifecycle.py     TurnLifecycleMixin：会话轮次生命周期 + 标题生成 + 线程 CRUD（ThreadService 职责）

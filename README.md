@@ -2,7 +2,7 @@
 
 多智能体职业顾问团队系统 —— 由 LangGraph supervisor 编排职位匹配、简历定制、面试模拟、薪资谈判、职业规划等多个 AI 顾问 agent，围绕自建多模态 RAG、三层记忆与 HITL 人工确认闸门，长期陪跑用户整个求职周期。
 
-> 架构设计、ADR 与排期详见 [docs/DEV_SPEC.md](docs/DEV_SPEC.md)；备份运维见 [docs/OPS_BACKUP.md](docs/OPS_BACKUP.md)。
+> 架构设计、ADR 与排期详见 [docs/架构与规划/开发规范.md](docs/架构与规划/开发规范.md)；备份运维见 [docs/运维手册/备份恢复.md](docs/运维手册/备份恢复.md)；文档索引见 [docs/README.md](docs/README.md)。
 
 ## 功能介绍
 
@@ -151,7 +151,7 @@ powershell -ExecutionPolicy Bypass -File scripts/start_chrome_cdp.ps1
 
 # Docker 部署时后端在容器里，无法代你启动宿主机浏览器：请新建一个 Chrome 快捷方式，
 # 位置填下面这行，用它打开并登录一次（登录态保存在专用数据目录，只需一次）。
-# 详见 docs/OPS_DOCKER_MIGRATION.md §8。
+# 详见 docs/运维手册/Docker迁移记录.md §8。
 # "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir=C:\ChromeDevData https://www.zhipin.com https://www.liepin.com
 ```
 
@@ -167,7 +167,7 @@ docker run -d --name postgres --restart unless-stopped -p 5432:5432 \
 docker run -d --name qdrant --restart unless-stopped -p 6333:6333 -p 6334:6334 qdrant/qdrant
 ```
 
-> 完整三服务一键编排见 [容器部署](#容器部署)；已有 PostgreSQL/Qdrant 数据迁移见 [docs/OPS_DOCKER_MIGRATION.md](docs/OPS_DOCKER_MIGRATION.md)。
+> 完整三服务一键编排见 [容器部署](#容器部署)；已有 PostgreSQL/Qdrant 数据迁移见 [docs/运维手册/Docker迁移记录.md](docs/运维手册/Docker迁移记录.md)。
 
 ### 6. 本地开发：启动项目
 
@@ -285,7 +285,7 @@ docker compose down
 - PostgreSQL、Qdrant、上传文件和解析产物均落在命名卷中；容器重建不会清空数据。
 - app 启动前自动执行 `alembic upgrade head`，迁移失败时容器不会半启动。
 - 已有旧版独立 `postgres`、`qdrant` 容器时，不要直接删除旧卷。先按 [PostgreSQL/Qdrant 迁移说明](docs/OPS_DOCKER_MIGRATION.md) 完成逻辑备份、恢复和逐表/逐集合校验。
-- 日常备份与恢复演练见 [docs/OPS_BACKUP.md](docs/OPS_BACKUP.md)。
+- 日常备份与恢复演练见 [docs/运维手册/备份恢复.md](docs/运维手册/备份恢复.md)。
 
 Compose 中的数据库默认不向宿主机发布端口。需要执行 SQL 时：
 
@@ -301,7 +301,7 @@ docker compose exec postgres psql -U careercrew -d careercrew
 - **Schema 迁移统一走 Alembic**：根目录 `alembic.ini` + `migrations/`（0001_baseline 为 pg_dump 全量快照，24 表）。容器部署在应用启动前自动 `alembic upgrade head`；本地手动执行 `alembic upgrade head` 即可初始化。各 store 保留惰性建表作为开发兜底，并有双库一致性守卫测试（`tests/integration/test_alembic_baseline.py`）拦住漂移——新增字段一律走新 migration。
 - **Qdrant** 集合 `careercrew_mm`（知识库）、`careercrew_episodic_v2`（情景记忆）与 `careercrew_workspace_messages`（工作区语义检索）由应用自动创建。
 - Docker 数据位于 `careercrew_pgdata`、`careercrew_qdrant_storage`、`careercrew_app_uploads`；不要通过复制运行中的数据库目录迁移。
-- 历史数据迁移脚本见 `scripts/migrate_*.py`（默认 dry-run，`--apply` 生效）；PostgreSQL dump、Qdrant snapshot 与文件哈希备份流程见 [docs/OPS_BACKUP.md](docs/OPS_BACKUP.md)。
+- 历史数据迁移脚本见 `scripts/migrate_*.py`（默认 dry-run，`--apply` 生效）；PostgreSQL dump、Qdrant snapshot 与文件哈希备份流程见 [docs/运维手册/备份恢复.md](docs/运维手册/备份恢复.md)。
 
 ## 测试
 
@@ -334,7 +334,7 @@ python scripts/eval_runner.py --offline --compare data/eval/baseline.json --fail
 ## 开发规范
 
 - **Commit**：历史提交遵循 Conventional Commits（`feat:` / `fix:` 前缀）；无正式 CONTRIBUTING 文档
-- **Python 静态检查**：ruff（配置在 `pyproject.toml [tool.ruff]`，CI typecheck job 执行 `ruff check` + `compileall`）；mypy 渐进接入见 docs/TECH_DEBT_PLAN.md
+- **Python 静态检查**：ruff（配置在 `pyproject.toml [tool.ruff]`，CI typecheck job 执行 `ruff check` + `compileall`）；mypy 渐进接入见 docs/架构与规划/技术债务计划.md
 - **前端**：oxlint 做 lint，`tsc -b` 随构建做类型检查
 - **CI**（GitHub Actions）：push main / PR 触发 unit、api（Postgres 服务容器 + 覆盖率）、postgres-memory、typecheck、frontend、eval-sanity、docker-build（镜像构建 + 容器内 Alembic 迁移冒烟）、security-audit（pip-audit）八类任务 + diff-cover 变更行覆盖率 ≥80% 门禁；dependabot 周检五类生态依赖；nightly 定时跑 integration / e2e（阻塞口径，真实模型评测除外）
 - **分支规范**：待补充
@@ -352,7 +352,7 @@ python scripts/eval_runner.py --offline --compare data/eval/baseline.json --fail
 | 首个请求卡住 10–30 秒 | 正常现象：embedding 等重组件按需惰性加载 |
 | 启动时报 BGE-M3 模型路径错误 | `config/settings.yaml` 的 `embedding.model_path` 默认是开发者本机路径，改为本地实际权重路径 |
 | 登录提示锁定 | 连续失败 5 次锁定 15 分钟（按用户名+IP 计数），稍后再试 |
-| `search_jobs` 无法获取岗位或提示未配置 | 职位搜索优先读本地 jobs 库缓存；实时抓取使用已登录 Chrome 的 CDP 调试通道（端口 9222）。本地直跑用 `scripts/start_chrome_cdp.ps1`；Docker 部署需在宿主机用带 `--remote-debugging-port=9222` 的快捷方式启动 Chrome（见 `docs/OPS_DOCKER_MIGRATION.md` §8）。职位匹配页的采集器卡片会显示具体不可用原因 |
+| `search_jobs` 无法获取岗位或提示未配置 | 职位搜索优先读本地 jobs 库缓存；实时抓取使用已登录 Chrome 的 CDP 调试通道（端口 9222）。本地直跑用 `scripts/start_chrome_cdp.ps1`；Docker 部署需在宿主机用带 `--remote-debugging-port=9222` 的快捷方式启动 Chrome（见 `docs/运维手册/Docker迁移记录.md` §8）。职位匹配页的采集器卡片会显示具体不可用原因 |
 | 文档 / 简历解析失败 | `MINERU_API_KEY` 未配置（`provider: api` 时必需），或文件超出大小上限（简历 20MB / 知识库 50MB / 附件 25MB） |
 | 国内访问百炼 / LangSmith 超时 | 配置代理（如 Clash `http://127.0.0.1:7890`）后重试 |
 

@@ -1,6 +1,6 @@
 """N1 浏览器通道单元测试：解析/风控探测/回退链，全部用 Fake 页面对象（无真浏览器）。
 
-CDP 真实链路的手动验收见 docs/TECH_DEBT_PLAN.md 附录（N1/N2 手动验收清单）。
+CDP 真实链路的手动验收见 docs/架构与规划/技术债务计划.md 附录（N1/N2 手动验收清单）。
 """
 from __future__ import annotations
 

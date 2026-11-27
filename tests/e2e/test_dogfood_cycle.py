@@ -27,7 +27,7 @@ class SelfDocsHS:
             QueryResult(id="d1", score=0.93,
                         text="CareerCrew 采用 LangGraph supervisor 编排多智能体："
                              "职位匹配/简历定制/面试模拟/薪资谈判/职业规划。",
-                        metadata={"source": "docs/DEV_SPEC.md"}),
+                        metadata={"source": "docs/架构与规划/开发规范.md"}),
             QueryResult(id="d2", score=0.88,
                         text="自建多模态 RAG：BGE-M3 三合一向量写入 Qdrant，"
                              "混合召回 + RRF 融合 + rerank 精排。",

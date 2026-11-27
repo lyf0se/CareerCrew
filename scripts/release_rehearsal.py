@@ -25,7 +25,7 @@ from urllib.parse import quote, unquote, urlsplit, urlunsplit
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_REPORT = ROOT / "docs" / "OPS_RELEASE_REHEARSAL.md"
+DEFAULT_REPORT = ROOT / "docs" / "运维手册" / "发布演练.md"
 DATABASE_NAME = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
 PREFIX_NAME = re.compile(r"^careercrew_rehearsal_[a-z0-9_]+$")
 SYNTHETIC_PAYLOAD = "synthetic-release-rehearsal"

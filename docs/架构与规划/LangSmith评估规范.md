@@ -2,7 +2,7 @@
 
 > 本文档合并两个工作流（Part A：Agent 执行链迁移；Part B：LangSmith 数据追踪），
 > 因为它们共享改动面（BaseAgent / ReactLoop / runtime / settings / tests），合并为一次迭代落地。
-> 前置条件：多模态 RAG 改造（`MULTIMODAL_RAG_SPEC.md`）先提交。
+> 前置条件：多模态 RAG 改造（`多模态RAG规范.md`）先提交。
 
 > **实施后定稿（2026-08-11）**：Part A/B 均已落地并提交（`05fc568` 及后续）。
 > 相对本文初稿的实际偏差已同步修正到正文：读取侧不再提供 `/api/runs` HTTP 接口
@@ -238,7 +238,7 @@ TracesPanel **均已移除**（`5167be1`）——追踪明细直接在 LangSmith
 - `logs/traces.jsonl` 停止写入，旧文件归档（logs/ 已在 gitignore）。
 - README：新增 `LANGSMITH_API_KEY` 说明；同步更新已过时的 RAG 描述（Milvus/Chroma →
   Qdrant/MinerU 多模态）与 Dashboard 说明（Streamlit → Web 前端）。
-- `DEV_SPEC.md` 不改（作为假设记录）。
+- `开发规范.md` 不改（作为假设记录）。
 
 ## Part C — 交互、实施顺序与风险
 

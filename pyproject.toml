@@ -82,7 +82,7 @@ extend-exclude = ["careercrew_web", "data", "logs"]
 [tool.ruff.lint]
 # 基线规则集：pycodestyle 错误级（不含 E501 行宽——中文注释按显示宽度计会误报，
 # 格式化交给 ruff format）+ pyflakes 真问题 + import 排序 + pyupgrade + bugbear。
-# 后续可渐进加 SIM/RUF/C4 等；mypy 渐进接入见 docs/TECH_DEBT_PLAN.md #2。
+# 后续可渐进加 SIM/RUF/C4 等；mypy 渐进接入见 docs/架构与规划/技术债务计划.md #2。
 select = ["E4", "E7", "E9", "F", "W", "I", "UP", "B"]
 ignore = [
     "B008", # FastAPI 惯用法：Depends()/Query() 作为参数默认值
