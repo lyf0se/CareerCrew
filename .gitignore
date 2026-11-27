@@ -49,6 +49,7 @@ data/login-locked.png
 
 # CareerCrew runtime data（向量库/模型/记忆不进 git；知识库文档进 git）
 data/db/
+data/dev_servers.json
 data/ms_cache/
 data/parsed/
 data/transcripts/

@@ -22,6 +22,10 @@ services:
       POSTGRES_USER: careercrew
       POSTGRES_PASSWORD: careercrew
       POSTGRES_DB: careercrew
+    ports:
+      # 开发模式（宿主机 uvicorn 直连 localhost:5432）需要宿主回环映射；
+      # 容器部署时 app 走 compose 内部网络，不受此映射影响。只绑回环，不暴露公网。
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -37,6 +41,9 @@ services:
     restart: unless-stopped
     environment:
       QDRANT__TELEMETRY_DISABLED: "true"
+    ports:
+      # 同 postgres：开发模式宿主机直连 + 控制台 localhost:6333/dashboard，仅绑回环
+      - "127.0.0.1:6333:6333"
     volumes:
       - qdrant_storage:/qdrant/storage
     healthcheck:

@@ -13,6 +13,21 @@
 
 ## 二、启动与停止
 
+**一键启动**（依赖容器 → 后端 → 前端，自动等待容器健康检查通过）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\dev_start.ps1
+# 顺带启动 Boss直聘/猎聘 CDP 抓取 Chrome 时加 -Chrome；.venv 已就绪可加 -NoSync 提速
+```
+
+**一键停止**（结束后端/前端进程树并停容器，数据保留在卷中）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\dev_stop.ps1
+```
+
+或按下面三步手动启动：
+
 ```powershell
 # 1) 只起依赖（推荐开发模式）
 docker compose up -d postgres qdrant
