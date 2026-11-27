@@ -1,4 +1,4 @@
-<#
+﻿<#
 停止 dev_start.ps1 启动的全部内容：
 1. 按 data/dev_servers.json 记录的 PID 结束后端 / 前端进程树（taskkill /T
    连同 uvicorn 的 python 子进程、vite 的 node 子进程一并结束）

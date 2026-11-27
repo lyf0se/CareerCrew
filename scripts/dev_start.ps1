@@ -1,4 +1,4 @@
-<#
+﻿<#
 CareerCrew 一键开发启动：依赖容器（postgres + qdrant）→ 后端 uvicorn → 前端 Vite。
 用法：
   powershell -ExecutionPolicy Bypass -File scripts\dev_start.ps1
@@ -95,15 +95,17 @@ if (-not $NoDocker) {
 }
 
 # ── 5. 后端 uvicorn：独立窗口运行，便于看日志 / Ctrl+C ──
-Write-Step '启动后端 uvicorn（:8100，首次惰性加载模型较慢）...'
-$backend = Start-Process pwsh -PassThru `
-    -ArgumentList '-NoExit', '-Command',
+# 新窗口宿主动态选择：有 PowerShell 7（pwsh）用 pwsh，否则回退 Windows 自带 powershell
+$shell = if (Get-Command pwsh -ErrorAction SilentlyContinue) { 'pwsh' } else { 'powershell' }
+Write-Step "启动后端 uvicorn（:8100，首次惰性加载模型较慢）..."
+$backend = Start-Process $shell -PassThru `
+    -ArgumentList '-NoExit', '-NoProfile', '-Command',
     "`$Host.UI.RawUI.WindowTitle = 'CareerCrew 后端 uvicorn'; Set-Location '$RepoRoot'; uv run uvicorn careercrew_api.main:app --reload --port 8100"
 
 # ── 6. 前端 Vite：独立窗口运行 ──
 Write-Step '启动前端 Vite dev server（:5276，strictPort）...'
-$frontend = Start-Process pwsh -PassThru `
-    -ArgumentList '-NoExit', '-Command',
+$frontend = Start-Process $shell -PassThru `
+    -ArgumentList '-NoExit', '-NoProfile', '-Command',
     "`$Host.UI.RawUI.WindowTitle = 'CareerCrew 前端 vite'; Set-Location '$RepoRoot\careercrew_web'; npm run dev"
 
 # ── 7. 可选：CDP 调试 Chrome（Boss直聘/猎聘抓取通道）──
