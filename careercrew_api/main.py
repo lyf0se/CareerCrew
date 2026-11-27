@@ -1,6 +1,6 @@
 """FastAPI 应用：CORS + /api 挂载 + 生产托管 careercrew_web/dist（SPA fallback）。
 
-开发：uvicorn careercrew_api.main:app --reload --port 8000（+ vite :5176 代理 /api）
+开发：uvicorn careercrew_api.main:app --reload --port 8100（+ vite :5276 代理 /api）
 生产：npm run build -> uvicorn 单端口托管 careercrew_web/dist（SPA fallback 到 index.html）
 """
 from __future__ import annotations

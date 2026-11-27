@@ -115,10 +115,10 @@ PostgreSQL、Qdrant 和 Web/API 全部由 Compose 管理：
 
 docker compose up -d --build
 docker compose ps
-curl http://localhost:8000/readyz
+curl http://localhost:8100/readyz
 ```
 
-启动完成后访问 <http://localhost:8000>。三个服务应全部为 `healthy`，`/readyz` 应返回：
+启动完成后访问 <http://localhost:8100>。三个服务应全部为 `healthy`，`/readyz` 应返回：
 
 ```json
 {"status":"ready","checks":{"postgres":"ok","qdrant":"ok"}}
@@ -132,7 +132,7 @@ curl http://localhost:8000/readyz
 # 后端（uv 管理：按 uv.lock 复现环境；含 FlagEmbedding/torch 等重 ML 栈，首次安装体积较大）
 uv sync --all-extras
 # 日常命令用 uv run 前缀在 .venv 中执行，例如：
-uv run uvicorn careercrew_api.main:app --reload --port 8000
+uv run uvicorn careercrew_api.main:app --reload --port 8100
 ```
 
 > 环境已从 conda（`miniconda3\envs\careercrew`）迁移到 uv（项目内 `.venv`，
@@ -173,22 +173,22 @@ docker run -d --name qdrant --restart unless-stopped -p 6333:6333 -p 6334:6334 q
 
 ```bash
 # 后端 API（首个请求触发重组件惰性加载，约 10–30 秒属正常）
-uvicorn careercrew_api.main:app --reload --port 8000
+uvicorn careercrew_api.main:app --reload --port 8100
 ```
 
 ```bash
-# 前端开发模式（端口固定 5176，/api 代理到 8000）
+# 前端开发模式（端口固定 5276，/api 代理到 8100）
 cd careercrew_web
 npm run dev
 ```
 
-打开 <http://localhost:5176>，首次使用在登录页创建初始管理员（仅 development 环境可用，对应 `POST /api/auth/bootstrap`）。
+打开 <http://localhost:5276>，首次使用在登录页创建初始管理员（仅 development 环境可用，对应 `POST /api/auth/bootstrap`）。
 
 **生产模式**：前端构建后由后端单端口托管：
 
 ```bash
 cd careercrew_web && npm run build   # 产物输出到 careercrew_web/dist
-uvicorn careercrew_api.main:app --port 8000   # 检测到 dist/ 即自动托管 + SPA fallback
+uvicorn careercrew_api.main:app --port 8100   # 检测到 dist/ 即自动托管 + SPA fallback
 ```
 
 ## 配置说明
@@ -208,7 +208,7 @@ uvicorn careercrew_api.main:app --port 8000   # 检测到 dist/ 即自动托管 
 | `CAREERCREW_ENV` | 否 | 运行环境覆盖（默认 development；production 会强制校验认证安全配置） |
 | `CAREERCREW_AGENT_VERSION` | 否 | agent 版本标记（进入追踪与评测记录） |
 | `CAREERCREW_EMBEDDING_MODEL_DIR` | Docker 按需 | 宿主机 BGE-M3 目录，只读挂载到 `/models/bge-m3`；默认 `./models/bge-m3` |
-| `CAREERCREW_WEB_PORT` | 否 | Compose 对外映射的 Web/API 端口；默认 `8000` |
+| `CAREERCREW_WEB_PORT` | 否 | Compose 对外映射的 Web/API 端口；默认 `8100` |
 | `PIP_PROXY` | 构建按需 | 镜像构建时传给 pip 的代理；Docker Desktop 可填 `http://host.docker.internal:7890` |
 | `OSS_ENDPOINT` / `OSS_ACCESS_KEY_ID` / `OSS_ACCESS_KEY_SECRET` / `OSS_BUCKET_NAME` | 否 | 阿里云 OSS 头像存储；任一缺失则回退本地 `data/uploads/avatars/` |
 | `POSTGRES_TEST_DSN` | 测试 | 集成测试使用的数据库连接串 |
@@ -217,14 +217,14 @@ uvicorn careercrew_api.main:app --port 8000   # 检测到 dist/ 即自动托管 
 
 | 服务 | 地址 |
 |------|------|
-| Frontend（开发模式） | <http://localhost:5176> |
-| Backend / API（同时托管前端生产构建） | <http://localhost:8000> |
-| Swagger UI | <http://localhost:8000/docs> |
-| ReDoc | <http://localhost:8000/redoc> |
-| OpenAPI Schema | <http://localhost:8000/openapi.json> |
-| Liveness 探针（无鉴权） | <http://localhost:8000/healthz> |
-| Readiness 探针（Postgres/Qdrant 连通性，无鉴权） | <http://localhost:8000/readyz> |
-| 组件级健康明细（需登录） | <http://localhost:8000/api/health> |
+| Frontend（开发模式） | <http://localhost:5276> |
+| Backend / API（同时托管前端生产构建） | <http://localhost:8100> |
+| Swagger UI | <http://localhost:8100/docs> |
+| ReDoc | <http://localhost:8100/redoc> |
+| OpenAPI Schema | <http://localhost:8100/openapi.json> |
+| Liveness 探针（无鉴权） | <http://localhost:8100/healthz> |
+| Readiness 探针（Postgres/Qdrant 连通性，无鉴权） | <http://localhost:8100/readyz> |
+| 组件级健康明细（需登录） | <http://localhost:8100/api/health> |
 | Qdrant（Compose 内网） | `http://qdrant:6333`（HTTP）/ 6334（gRPC） |
 | PostgreSQL（Compose 内网） | `postgres:5432` |
 
@@ -238,7 +238,7 @@ FastAPI 默认文档页开启：Swagger UI `/docs`、ReDoc `/redoc`、OpenAPI Sc
 
 | 服务 | 容器名 | 持久化卷 | 访问方式 |
 |---|---|---|---|
-| Web / API | `careercrew-app` | `careercrew_app_uploads` | 宿主机 `http://localhost:${CAREERCREW_WEB_PORT:-8000}` |
+| Web / API | `careercrew-app` | `careercrew_app_uploads` | 宿主机 `http://localhost:${CAREERCREW_WEB_PORT:-8100}` |
 | PostgreSQL 16 | `careercrew-postgres` | `careercrew_pgdata` | Compose 内网 `postgres:5432` |
 | Qdrant | `careercrew-qdrant` | `careercrew_qdrant_storage` | Compose 内网 `http://qdrant:6333` |
 
@@ -252,7 +252,7 @@ cp .env.example .env
 docker compose config --quiet
 docker compose up -d --build
 docker compose ps
-curl http://localhost:8000/readyz
+curl http://localhost:8100/readyz
 ```
 
 应用镜像由三个构建阶段组成：Node 编译前端、Python 安装 CPU 版 torch 和完整 ML 依赖、运行镜像组装 venv 与前端 `dist`。构建阶段支持 pip 重试和缓存；国内网络可设置：
@@ -337,7 +337,7 @@ npm run build     # tsc -b && vite build（类型检查随构建）
 
 | 现象 | 原因与处理 |
 |------|-----------|
-| `docker compose up` 报 8000 端口占用 | 本机已有服务占用 `8000`；停止旧进程，或在 `.env` 设置 `CAREERCREW_WEB_PORT=其他端口` |
+| `docker compose up` 报 8100 端口占用 | 本机已有服务占用 `8100`；停止旧进程，或在 `.env` 设置 `CAREERCREW_WEB_PORT=其他端口` |
 | 前端启动报端口占用退出 | Vite 配置了 `strictPort: true`（5176 固定），释放端口或改 `vite.config.ts`（注意同步 `auth.trusted_origins`） |
 | 后端启动即抛 `SettingsError` | `.env` 缺少必填变量（`DASHSCOPE_API_KEY` / `DATABASE_URL`），或 `config/settings.yaml` 字段非法 |
 | Docker 构建下载 PyPI 超时 | 在 `.env` 设置 `PIP_PROXY=http://host.docker.internal:7890` 后重新执行 `docker compose build app` |

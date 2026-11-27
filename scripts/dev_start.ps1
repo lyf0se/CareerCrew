@@ -33,10 +33,10 @@ if (-not (Test-Path .env)) {
     throw '缺少 .env：请先复制 .env.example 为 .env 并填写 API key 与密钥'
 }
 
-# ── 1.5 端口预检：8000（后端）/ 5176（前端）被占用时提前报错并指出占用者 ──
+# ── 1.5 端口预检：8100（后端）/ 5276（前端）被占用时提前报错并指出占用者 ──
 foreach ($need in @(
-    @{ Port = 8000; Label = '后端 uvicorn' },
-    @{ Port = 5176; Label = '前端 vite' }
+    @{ Port = 8100; Label = '后端 uvicorn' },
+    @{ Port = 5276; Label = '前端 vite' }
 )) {
     $conn = Get-NetTCPConnection -LocalPort $need.Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($conn) {
@@ -95,13 +95,13 @@ if (-not $NoDocker) {
 }
 
 # ── 5. 后端 uvicorn：独立窗口运行，便于看日志 / Ctrl+C ──
-Write-Step '启动后端 uvicorn（:8000，首次惰性加载模型较慢）...'
+Write-Step '启动后端 uvicorn（:8100，首次惰性加载模型较慢）...'
 $backend = Start-Process pwsh -PassThru `
     -ArgumentList '-NoExit', '-Command',
-    "`$Host.UI.RawUI.WindowTitle = 'CareerCrew 后端 uvicorn'; Set-Location '$RepoRoot'; uv run uvicorn careercrew_api.main:app --reload --port 8000"
+    "`$Host.UI.RawUI.WindowTitle = 'CareerCrew 后端 uvicorn'; Set-Location '$RepoRoot'; uv run uvicorn careercrew_api.main:app --reload --port 8100"
 
 # ── 6. 前端 Vite：独立窗口运行 ──
-Write-Step '启动前端 Vite dev server（:5176，strictPort）...'
+Write-Step '启动前端 Vite dev server（:5276，strictPort）...'
 $frontend = Start-Process pwsh -PassThru `
     -ArgumentList '-NoExit', '-Command',
     "`$Host.UI.RawUI.WindowTitle = 'CareerCrew 前端 vite'; Set-Location '$RepoRoot\careercrew_web'; npm run dev"
@@ -123,9 +123,9 @@ New-Item -ItemType Directory -Force (Split-Path $runState) *> $null
 
 Write-Host ''
 Write-Host '全部已启动：' -ForegroundColor Green
-Write-Host '  前端        http://localhost:5176'
-Write-Host '  后端 API    http://localhost:8000（/docs 为 Swagger UI）'
-Write-Host '  就绪探针    http://localhost:8000/readyz'
+Write-Host '  前端        http://localhost:5276'
+Write-Host '  后端 API    http://localhost:8100（/docs 为 Swagger UI）'
+Write-Host '  就绪探针    http://localhost:8100/readyz'
 Write-Host '  Qdrant 控制台 http://localhost:6333/dashboard'
 Write-Host ''
 Write-Host '停止全部：powershell -ExecutionPolicy Bypass -File scripts\dev_stop.ps1'

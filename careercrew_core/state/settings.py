@@ -275,8 +275,8 @@ class AuthSettings(BaseModel):
     trusted_origins: list[str] = [
         "http://localhost:5175",
         "http://127.0.0.1:5175",
-        "http://localhost:5176",
-        "http://127.0.0.1:5176",
+        "http://localhost:5276",
+        "http://127.0.0.1:5276",
     ]
     login_max_failures: int = 5
     login_failure_window_minutes: int = 15

@@ -11,8 +11,8 @@
     {
       "name": "api",
       "runtimeExecutable": ".venv\\Scripts\\uvicorn.exe",
-      "runtimeArgs": ["careercrew_api.main:app", "--reload", "--port", "8000"],
-      "port": 8000
+      "runtimeArgs": ["careercrew_api.main:app", "--reload", "--port", "8100"],
+      "port": 8100
     }
   ]
 }

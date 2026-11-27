@@ -142,7 +142,7 @@ oss:
 auth:
   environment: production           # compose 部署视为生产（强制 jwt_secret ≥32 字符）
   database_url: "${AUTH_DATABASE_URL}"
-  trusted_origins: ["http://localhost:8000", "http://127.0.0.1:8000"]  # 有域名/LB 时在此追加
+  trusted_origins: ["http://localhost:8100", "http://127.0.0.1:8100"]  # 有域名/LB 时在此追加
   login_max_failures: 5
   login_failure_window_minutes: 15
   login_lock_minutes: 15

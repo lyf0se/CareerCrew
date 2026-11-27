@@ -77,7 +77,7 @@ services:
     ports:
       # 只绑定回环：采集需要后端反向控制宿主机 Chrome（tools.browser.local_guard
       # 会放行 Docker 网桥网段），公网可达性必须由这条绑定挡住。
-      - "127.0.0.1:${CAREERCREW_WEB_PORT:-8000}:8000"
+      - "127.0.0.1:${CAREERCREW_WEB_PORT:-8100}:8000"
     extra_hosts:
       # 容器内访问宿主机 Chrome 调试端口（tools.search.boss_cdp_url）。
       # Docker Desktop 已内置该解析；Linux/WSL 需要 host-gateway 显式映射。

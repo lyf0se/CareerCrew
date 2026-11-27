@@ -152,7 +152,7 @@ oss:
 auth:
   environment: development   # 可用 CAREERCREW_ENV 覆盖为 production
   database_url: "${AUTH_DATABASE_URL}"
-  trusted_origins: ["http://localhost:5175", "http://127.0.0.1:5175", "http://localhost:5176", "http://127.0.0.1:5176", "http://localhost:8000", "http://127.0.0.1:8000"]
+  trusted_origins: ["http://localhost:5175", "http://127.0.0.1:5175", "http://localhost:5276", "http://127.0.0.1:5276", "http://localhost:8100", "http://127.0.0.1:8100"]
   login_max_failures: 5
   login_failure_window_minutes: 15
   login_lock_minutes: 15

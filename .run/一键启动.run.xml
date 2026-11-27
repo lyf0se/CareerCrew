@@ -1,0 +1,11 @@
+<component name="ProjectRunConfigurationManager">
+  <!-- IDEA 运行配置：右上角下拉选择「一键启动」点绿色三角即可，无需命令行 -->
+  <configuration default="false" name="一键启动" type="ShConfigurationType" factoryName="Shell Script">
+    <option name="INTERPRETER_PATH" value="powershell.exe" />
+    <option name="INTERPRETER_OPTIONS" value="-NoProfile -ExecutionPolicy Bypass -File" />
+    <option name="SCRIPT_PATH" value="$PROJECT_DIR$/scripts/dev_start.ps1" />
+    <option name="SCRIPT_OPTIONS" value="" />
+    <option name="EXECUTE_IN_TERMINAL" value="true" />
+    <method v="2" />
+  </configuration>
+</component>
