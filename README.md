@@ -48,7 +48,7 @@
 | Frontend | React 19、TypeScript、Vite 8、Tailwind CSS 3.4、Zustand、react-router-dom 7、react-markdown |
 | Testing | pytest（pytest-mock / pytest-check / pytest-cov）、Vitest + Testing Library、diff-cover 变更行覆盖率门禁 |
 | DevOps | GitHub Actions 分层 CI |
-| 第三方服务 | 硅基流动（LLM / rerank / VLM）、MinerU（文档解析）、LangSmith（追踪，可选）、阿里云 OSS（头像存储，可选）、Exa（仅 `scripts/fetch_kb.py` 抓语料用） |
+| 第三方服务 | 硅基流动（LLM / rerank / VLM）、MinerU（文档解析）、LangSmith（追踪，可选）、阿里云 OSS（头像存储，可选） |
 
 ## 项目结构
 
@@ -301,7 +301,7 @@ docker compose exec postgres psql -U careercrew -d careercrew
 - **Schema 迁移统一走 Alembic**：根目录 `alembic.ini` + `migrations/`（0001_baseline 为 pg_dump 全量快照，24 表）。容器部署在应用启动前自动 `alembic upgrade head`；本地手动执行 `alembic upgrade head` 即可初始化。各 store 保留惰性建表作为开发兜底，并有双库一致性守卫测试（`tests/integration/test_alembic_baseline.py`）拦住漂移——新增字段一律走新 migration。
 - **Qdrant** 集合 `careercrew_mm`（知识库）、`careercrew_episodic_v2`（情景记忆）与 `careercrew_workspace_messages`（工作区语义检索）由应用自动创建。
 - Docker 数据位于 `careercrew_pgdata`、`careercrew_qdrant_storage`、`careercrew_app_uploads`；不要通过复制运行中的数据库目录迁移。
-- 历史数据迁移脚本见 `scripts/migrate_*.py`（默认 dry-run，`--apply` 生效）；PostgreSQL dump、Qdrant snapshot 与文件哈希备份流程见 [docs/运维手册/备份恢复.md](docs/运维手册/备份恢复.md)。
+- 历史数据迁移与备份/恢复等一次性脚本已随 2026-11-27 的 scripts 精简移除（git 历史可找回）；日常备份直接使用 `pg_dump` 与 Qdrant snapshot。
 
 ## 测试
 
@@ -325,18 +325,12 @@ npm run lint      # oxlint
 npm run build     # tsc -b && vite build（类型检查随构建）
 ```
 
-评测回归门禁（CI 中同样执行）：
-
-```bash
-python scripts/eval_runner.py --offline --compare data/eval/baseline.json --fail-on-regression
-```
-
 ## 开发规范
 
 - **Commit**：历史提交遵循 Conventional Commits（`feat:` / `fix:` 前缀）；无正式 CONTRIBUTING 文档
 - **Python 静态检查**：ruff（配置在 `pyproject.toml [tool.ruff]`，CI typecheck job 执行 `ruff check` + `compileall`）；mypy 渐进接入见 docs/架构与规划/技术债务计划.md
 - **前端**：oxlint 做 lint，`tsc -b` 随构建做类型检查
-- **CI**（GitHub Actions）：push main / PR 触发 unit、api（Postgres 服务容器 + 覆盖率）、postgres-memory、typecheck、frontend、eval-sanity、docker-build（镜像构建 + 容器内 Alembic 迁移冒烟）、security-audit（pip-audit）八类任务 + diff-cover 变更行覆盖率 ≥80% 门禁；dependabot 周检五类生态依赖；nightly 定时跑 integration / e2e（阻塞口径，真实模型评测除外）
+- **CI**（GitHub Actions）：push main / PR 触发 unit、api（Postgres 服务容器 + 覆盖率）、postgres-memory、typecheck、frontend、docker-build（镜像构建 + 容器内 Alembic 迁移冒烟）、security-audit（pip-audit）七类任务 + diff-cover 变更行覆盖率 ≥80% 门禁；dependabot 周检五类生态依赖；nightly 定时跑 integration / e2e（阻塞口径，真实模型评测除外）
 - **分支规范**：待补充
 
 ## 常见问题

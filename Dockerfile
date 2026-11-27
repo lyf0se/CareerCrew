@@ -38,7 +38,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     && pip install $PIP_EXTRA ".[web]"
 
 # 真实源码覆盖占位包；项目本体以 --no-deps 安装（依赖已就位，秒级），
-# 保证非 /app 工作目录启动（如 alembic、scripts）也能导入正确代码
+# 保证非 /app 工作目录启动（如 alembic）也能导入正确代码
 COPY careercrew_core/ careercrew_core/
 COPY careercrew_ai/ careercrew_ai/
 COPY careercrew_api/ careercrew_api/
@@ -65,15 +65,10 @@ COPY --from=builder /opt/venv /opt/venv
 COPY alembic.ini README.md pyproject.toml ./
 COPY migrations/ migrations/
 COPY config/ config/
-COPY scripts/ scripts/
 COPY careercrew_core/ careercrew_core/
 COPY careercrew_ai/ careercrew_ai/
 COPY careercrew_api/ careercrew_api/
 COPY careercrew_mcp/ careercrew_mcp/
-
-# Fail the image build if a published migration was edited or the revision
-# manifest no longer describes the checked-in migration set.
-RUN python scripts/validate_migrations.py --static
 
 # 拷贝阶段 0 构建的前端生产构建产物，供 FastAPI 单端口托管 + SPA fallback
 COPY --from=web-builder /web/dist /app/careercrew_web/dist

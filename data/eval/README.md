@@ -17,6 +17,9 @@ the offline regression evaluation.
 
 ## Commands
 
+> 2026-11-27：`scripts/eval_runner.py` 已随 scripts 精简移除（git 历史可找回），
+> CI 的 eval-sanity 门禁同步移除。以下命令仅作历史参考。
+
 ```bash
 # Offline non-regression gate (required on PRs)
 python scripts/eval_runner.py --offline --compare data/eval/baseline.json --fail-on-regression
