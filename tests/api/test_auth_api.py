@@ -77,21 +77,31 @@ def test_refresh_cookie_rotates_and_logout_invalidates_session(auth_client):
     old_cookie = auth_client.cookies.get("careercrew_refresh")
     assert old_cookie
 
-    refresh = auth_client.post("/api/auth/refresh")
+    refresh = auth_client.post(
+        "/api/auth/refresh", headers={"Cookie": f"careercrew_refresh={old_cookie}"}
+    )
     assert refresh.status_code == 200
     new_cookie = auth_client.cookies.get("careercrew_refresh")
     assert new_cookie and new_cookie != old_cookie
 
-    auth_client.cookies.set("careercrew_refresh", old_cookie, path="/api/auth")
-    replay = auth_client.post("/api/auth/refresh")
+    # 重放旧值：轮换后旧令牌必须已被服务端撤销。
+    # 每个请求显式携带 Cookie 头，而不是把值写回测试客户端的 cookie jar：
+    # httpx2 的 IndexedCookieJar 按 domain 索引发送同名条目，顺序与 httpx
+    # 相反，jar 中后写入的"旧值"会被随后的"新值"覆盖，导致重放意图失真。
+    # 显式 Cookie 头在两套客户端下都不触发 jar 合并，行为一致。
+    replay = auth_client.post(
+        "/api/auth/refresh", headers={"Cookie": f"careercrew_refresh={old_cookie}"}
+    )
     assert replay.status_code == 401
 
     # 恢复新 cookie 后验证 logout 确实撤销服务端会话，而非仅删除浏览器值。
-    auth_client.cookies.set("careercrew_refresh", new_cookie, path="/api/auth")
-    logout = auth_client.post("/api/auth/logout")
+    logout = auth_client.post(
+        "/api/auth/logout", headers={"Cookie": f"careercrew_refresh={new_cookie}"}
+    )
     assert logout.status_code == 204
-    auth_client.cookies.set("careercrew_refresh", new_cookie, path="/api/auth")
-    assert auth_client.post("/api/auth/refresh").status_code == 401
+    assert auth_client.post(
+        "/api/auth/refresh", headers={"Cookie": f"careercrew_refresh={new_cookie}"}
+    ).status_code == 401
 
 
 @pytest.mark.web
