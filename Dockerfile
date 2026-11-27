@@ -7,7 +7,7 @@
 # 3. runtime：组装 Python venv 与前端 dist，单端口启动提供静态 SPA 与 API 服务
 
 # ── 阶段 0：前端构建 ──
-FROM node:22-alpine AS web-builder
+FROM node:26-alpine AS web-builder
 WORKDIR /web
 COPY careercrew_web/package*.json ./
 RUN npm ci --prefer-offline
